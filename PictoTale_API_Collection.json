@@ -1,0 +1,575 @@
+{
+  "info": {
+    "name": "PictoTale API Collection",
+    "description": "Complete API testing collection for PictoTale app",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "Bearer your-jwt-token-here",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "user123456789",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{authToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "User Profile Management",
+      "item": [
+        {
+          "name": "Get User Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{authToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "profile"]
+            }
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"profile\": {\n      \"uid\": \"user123456789\",\n      \"email\": \"parent@example.com\",\n      \"displayName\": \"Emma Thompson\",\n      \"photoURL\": \"https://example.com/avatar.jpg\",\n      \"profile\": {\n        \"childName\": \"Sophie\",\n        \"age\": 7,\n        \"avatarUrl\": \"https://example.com/child-avatar.jpg\",\n        \"favoriteCharacters\": [\"princess\", \"dragon\", \"unicorn\"],\n        \"favoriteGenres\": [\"adventure\", \"fantasy\"],\n        \"preferredLanguage\": \"en\",\n        \"isChildAccount\": true\n      },\n      \"preferences\": {\n        \"voiceNarrationEnabled\": true,\n        \"backgroundMusicEnabled\": true,\n        \"soundEffectsEnabled\": true,\n        \"narrationSpeed\": 1.0,\n        \"voiceType\": \"child-friendly\",\n        \"autoplayEnabled\": true,\n        \"preferredStoryStyle\": \"animated\",\n        \"maxStoryLength\": 500\n      },\n      \"progress\": {\n        \"totalStoriesCreated\": 15,\n        \"totalStoriesCompleted\": 12,\n        \"totalDrawingsMade\": 25,\n        \"totalListeningTime\": 180,\n        \"streakDays\": 7,\n        \"creativityLevel\": 3,\n        \"experiencePoints\": 250\n      },\n      \"savedStoryIds\": [\"story1\", \"story2\"],\n      \"favoriteStoryIds\": [\"story3\", \"story4\"]\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update User Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{authToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"displayName\": \"Emma Thompson\",\n  \"profile\": {\n    \"childName\": \"Sophie\",\n    \"age\": 8,\n    \"favoriteCharacters\": [\"princess\", \"dragon\", \"unicorn\", \"fairy\"],\n    \"favoriteGenres\": [\"adventure\", \"fantasy\", \"mystery\"],\n    \"preferredLanguage\": \"en\"\n  },\n  \"preferences\": {\n    \"voiceNarrationEnabled\": true,\n    \"backgroundMusicEnabled\": true,\n    \"soundEffectsEnabled\": true,\n    \"narrationSpeed\": 1.2,\n    \"voiceType\": \"child-friendly\",\n    \"autoplayEnabled\": true,\n    \"preferredStoryStyle\": \"animated\",\n    \"maxStoryLength\": 600\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "profile"]
+            }
+          }
+        },
+        {
+          "name": "Upload Avatar",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{authToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "avatar",
+                  "type": "file",
+                  "src": "/path/to/avatar.jpg"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/profile/avatar",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "profile", "avatar"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Progress & Dashboard",
+      "item": [
+        {
+          "name": "Get User Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{authToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/dashboard",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "dashboard"]
+            }
+          },
+          "response": [
+            {
+              "name": "Dashboard Data",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"profile\": {\n      \"childName\": \"Sophie\",\n      \"age\": 7,\n      \"avatarUrl\": \"https://example.com/avatar.jpg\"\n    },\n    \"progress\": {\n      \"totalStoriesCreated\": 15,\n      \"totalStoriesCompleted\": 12,\n      \"creativityLevel\": 3,\n      \"experiencePoints\": 250,\n      \"streakDays\": 7\n    },\n    \"recentStories\": [\n      {\n        \"id\": \"story1\",\n        \"title\": \"The Magical Forest\",\n        \"createdAt\": \"2024-01-15T10:30:00Z\"\n      }\n    ],\n    \"achievementProgress\": {\n      \"nextBadge\": {\n        \"nextLevel\": 4,\n        \"xpNeeded\": 150,\n        \"progress\": 0.5\n      },\n      \"streakStatus\": {\n        \"active\": true,\n        \"days\": 7\n      },\n      \"creativityGrowth\": {\n        \"level\": 3,\n        \"totalCreations\": 40,\n        \"rank\": \"Budding Artist\"\n      }\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Progress",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{authToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"totalStoriesCreated\": 16,\n  \"totalStoriesCompleted\": 13,\n  \"totalDrawingsMade\": 26,\n  \"totalListeningTime\": 190,\n  \"streakDays\": 8,\n  \"experiencePoints\": 270,\n  \"achievements\": [\n    {\n      \"id\": \"story_master\",\n      \"title\": \"Story Master\",\n      \"description\": \"Created 15 stories\",\n      \"iconUrl\": \"https://example.com/badge.png\",\n      \"earnedAt\": \"2024-01-15T12:00:00Z\",\n      \"type\": \"story\",\n      \"pointsEarned\": 50\n    }\n  ],\n  \"badges\": [\n    {\n      \"id\": \"creative_streak\",\n      \"name\": \"Creative Streak\",\n      \"description\": \"7 days in a row of creativity\",\n      \"iconUrl\": \"https://example.com/streak.png\",\n      \"rarity\": \"uncommon\",\n      \"earnedAt\": \"2024-01-15T12:00:00Z\",\n      \"criteria\": {\n        \"streakDays\": 7\n      }\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/progress",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "progress"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Story Management",
+      "item": [
+        {
+          "name": "Add Story to Saved",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{authToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"storyId\": \"story_12345\",\n  \"action\": \"add\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/stories/saved",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "stories", "saved"]
+            }
+          }
+        },
+        {
+          "name": "Remove Story from Saved",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{authToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"storyId\": \"story_12345\",\n  \"action\": \"remove\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/stories/saved",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "stories", "saved"]
+            }
+          }
+        },
+        {
+          "name": "Add Story to Favorites",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{authToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"storyId\": \"story_67890\",\n  \"action\": \"add\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/stories/favorites",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "stories", "favorites"]
+            }
+          }
+        },
+        {
+          "name": "Remove Story from Favorites",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{authToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"storyId\": \"story_67890\",\n  \"action\": \"remove\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/stories/favorites",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "stories", "favorites"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Parental Controls",
+      "item": [
+        {
+          "name": "Update Parental Controls",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{authToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"parentalPin\": \"1234\",\n  \"requiresPinForSettings\": true,\n  \"requiresPinForPurchases\": true,\n  \"maxDailyUsageMinutes\": 60,\n  \"allowedGenres\": [\"adventure\", \"fantasy\", \"educational\"],\n  \"blockedWords\": [\"scary\", \"violent\"],\n  \"shareProgressWithParent\": true,\n  \"allowSocialFeatures\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/parental-controls",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "parental-controls"]
+            }
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"message\": \"Parental controls updated successfully\",\n  \"data\": {\n    \"parentalControls\": {\n      \"parentEmail\": \"parent@example.com\",\n      \"requiresPinForSettings\": true,\n      \"requiresPinForPurchases\": true,\n      \"maxDailyUsageMinutes\": 60,\n      \"allowedGenres\": [\"adventure\", \"fantasy\", \"educational\"],\n      \"blockedWords\": [\"scary\", \"violent\"],\n      \"shareProgressWithParent\": true,\n      \"allowSocialFeatures\": false\n    }\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Admin/Moderator Endpoints",
+      "item": [
+        {
+          "name": "Get All Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{authToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/all?page=1&limit=10&search=sophie&ageRange=5-10&subscriptionTier=premium&creativityLevel=3",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "all"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "search",
+                  "value": "sophie"
+                },
+                {
+                  "key": "ageRange",
+                  "value": "5-10"
+                },
+                {
+                  "key": "subscriptionTier",
+                  "value": "premium"
+                },
+                {
+                  "key": "creativityLevel",
+                  "value": "3"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Single User",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{authToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{userId}}"]
+            }
+          },
+          "response": [
+            {
+              "name": "User Details",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"user\": {\n      \"uid\": \"user123456789\",\n      \"email\": \"parent@example.com\",\n      \"displayName\": \"Emma Thompson\",\n      \"profile\": {\n        \"childName\": \"Sophie\",\n        \"age\": 7\n      },\n      \"progress\": {\n        \"totalStoriesCreated\": 15,\n        \"creativityLevel\": 3\n      }\n    },\n    \"stats\": {\n      \"totalStories\": 15,\n      \"progress\": {\n        \"totalStoriesCreated\": 15,\n        \"creativityLevel\": 3\n      },\n      \"joinedDate\": \"2024-01-01T00:00:00Z\",\n      \"lastActive\": \"2024-01-15T10:30:00Z\"\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update User Role",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{authToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"moderator\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId}}/role",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{userId}}", "role"]
+            }
+          }
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{authToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{userId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Error Test Cases",
+      "item": [
+        {
+          "name": "Invalid Age Update",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{authToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"profile\": {\n    \"age\": 25\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "profile"]
+            }
+          },
+          "response": [
+            {
+              "name": "Error Response",
+              "code": 400,
+              "body": "{\n  \"success\": false,\n  \"message\": \"Age must be between 3 and 17 for child accounts\",\n  \"error\": \"Bad Request\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Invalid Narration Speed",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{authToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"preferences\": {\n    \"narrationSpeed\": 3.0\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "profile"]
+            }
+          },
+          "response": [
+            {
+              "name": "Error Response",
+              "code": 400,
+              "body": "{\n  \"success\": false,\n  \"message\": \"Narration speed must be between 0.5 and 2.0\",\n  \"error\": \"Bad Request\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Invalid Story Action",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{authToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"storyId\": \"story123\",\n  \"action\": \"invalid_action\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/stories/saved",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "stories", "saved"]
+            }
+          },
+          "response": [
+            {
+              "name": "Error Response",
+              "code": 400,
+              "body": "{\n  \"success\": false,\n  \"message\": \"Invalid story ID or action\",\n  \"error\": \"Bad Request\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Unauthorized Access",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "profile"]
+            }
+          },
+          "response": [
+            {
+              "name": "Unauthorized",
+              "code": 401,
+              "body": "{\n  \"success\": false,\n  \"message\": \"Access denied. No token provided\",\n  \"error\": \"Unauthorized\"\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

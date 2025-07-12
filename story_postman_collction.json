@@ -1,0 +1,605 @@
+{
+  "info": {
+    "name": "PictoTale Story API Tests",
+    "description": "Complete testing suite for PictoTale story creation and management"
+  },
+  "variable": [
+    {
+      "name": "Story Management",
+      "item": [
+        {
+          "name": "Continue Story",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"additionalPrompt\": \"Now Luna and Max meet a wise owl who gives them a magical map\",\n  \"newCharacters\": [\"Wise Owl\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stories/{{storyId}}/continue",
+              "host": ["{{baseUrl}}"],
+              "path": ["stories", "{{storyId}}", "continue"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Story continuation started', function () {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson.success).to.be.true;",
+                  "    pm.expect(responseJson.data.status).to.equal('generating');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Share Story",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isShared\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stories/{{storyId}}/share",
+              "host": ["{{baseUrl}}"],
+              "path": ["stories", "{{storyId}}", "share"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Story shared successfully', function () {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson.success).to.be.true;",
+                  "    pm.expect(responseJson.message).to.include('shared');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unshare Story",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isShared\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stories/{{storyId}}/share",
+              "host": ["{{baseUrl}}"],
+              "path": ["stories", "{{storyId}}", "share"]
+            }
+          }
+        },
+        {
+          "name": "Delete Story",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/stories/{{storyId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["stories", "{{storyId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Story deleted successfully', function () {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson.success).to.be.true;",
+                  "    pm.expect(responseJson.message).to.include('deleted');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Featured & Popular Stories",
+      "item": [
+        {
+          "name": "Get Featured Stories",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/stories/featured?limit=5&category=popular",
+              "host": ["{{baseUrl}}"],
+              "path": ["stories", "featured"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "5"
+                },
+                {
+                  "key": "category",
+                  "value": "popular"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns featured stories', function () {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson.success).to.be.true;",
+                  "    pm.expect(responseJson.data.stories).to.be.an('array');",
+                  "});",
+                  "",
+                  "pm.test('Stories are public/shared', function () {",
+                  "    const responseJson = pm.response.json();",
+                  "    responseJson.data.stories.forEach(story => {",
+                  "        pm.expect(story.isShared).to.be.true;",
+                  "        pm.expect(story.status).to.equal('completed');",
+                  "    });",
+                  "});",
+                  "",
+                  "pm.test('Sensitive data is removed', function () {",
+                  "    const responseJson = pm.response.json();",
+                  "    responseJson.data.stories.forEach(story => {",
+                  "        pm.expect(story).to.not.have.property('userInput');",
+                  "        pm.expect(story.metadata).to.not.have.property('aiGenerationData');",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Recent Stories",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/stories/featured?limit=10&category=recent",
+              "host": ["{{baseUrl}}"],
+              "path": ["stories", "featured"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "category",
+                  "value": "recent"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Error Handling & Edge Cases",
+      "item": [
+        {
+          "name": "Get Non-existent Story",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/stories/non-existent-story-id",
+              "host": ["{{baseUrl}}"],
+              "path": ["stories", "non-existent-story-id"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 404 for non-existent story', function () {",
+                  "    pm.expect(pm.response.code).to.equal(404);",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson.success).to.be.false;",
+                  "    pm.expect(responseJson.message).to.include('not found');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Access Other User's Private Story",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/stories/other-users-private-story",
+              "host": ["{{baseUrl}}"],
+              "path": ["stories", "other-users-private-story"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 403 for unauthorized access', function () {",
+                  "    if (pm.response.code === 404) {",
+                  "        // Story doesn't exist - that's also valid",
+                  "        pm.expect(pm.response.code).to.equal(404);",
+                  "    } else {",
+                  "        pm.expect(pm.response.code).to.equal(403);",
+                  "        const responseJson = pm.response.json();",
+                  "        pm.expect(responseJson.message).to.include('Access denied');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Story Without Authentication",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"storyTypeId\": \"adventure\",\n  \"userPrompt\": \"Test story\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stories/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["stories", "create"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Requires authentication', function () {",
+                  "    pm.expect(pm.response.code).to.equal(401);",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson.success).to.be.false;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Story with Invalid Story Type",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"storyTypeId\": \"invalid-story-type\",\n  \"userPrompt\": \"Test story\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stories/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["stories", "create"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Rejects invalid story type', function () {",
+                  "    pm.expect(pm.response.code).to.equal(400);",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson.message).to.include('Invalid story type');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Continue Non-completed Story",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"additionalPrompt\": \"Continue the story\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stories/generating-story-id/continue",
+              "host": ["{{baseUrl}}"],
+              "path": ["stories", "generating-story-id", "continue"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Prevents continuation of non-completed story', function () {",
+                  "    if (pm.response.code === 404) {",
+                  "        // Story doesn't exist",
+                  "        pm.expect(pm.response.code).to.equal(404);",
+                  "    } else {",
+                  "        pm.expect(pm.response.code).to.equal(400);",
+                  "        const responseJson = pm.response.json();",
+                  "        pm.expect(responseJson.message).to.include('Cannot continue');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Admin Story Management",
+      "item": [
+        {
+          "name": "Create Story Type (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Science Fiction\",\n  \"description\": \"Futuristic adventures with robots, space travel, and amazing technology\",\n  \"iconUrl\": \"https://example.com/icons/scifi.svg\",\n  \"coverImageUrl\": \"https://example.com/covers/scifi.jpg\",\n  \"characteristics\": [\n    \"space exploration\",\n    \"friendly robots\",\n    \"future technology\",\n    \"scientific discovery\",\n    \"problem solving\"\n  ],\n  \"colorScheme\": \"#3498DB\",\n  \"recommendedAgeMin\": 6,\n  \"recommendedAgeMax\": 12,\n  \"sortOrder\": 9,\n  \"aiPromptTemplate\": {\n    \"basePrompt\": \"Create a child-friendly science fiction story with amazing technology and space adventures\",\n    \"themes\": [\"technology\", \"exploration\", \"science\", \"innovation\"],\n    \"vocabulary\": \"science and technology words explained simply\",\n    \"structure\": \"introduce technology, explore possibilities, solve problems with science\"\n  },\n  \"sampleStoryTitles\": [\n    \"Robot Friend from Mars\",\n    \"The Amazing Space School\",\n    \"Time Machine Adventures\"\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stories/types",
+              "host": ["{{baseUrl}}"],
+              "path": ["stories", "types"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Admin can create story type', function () {",
+                  "    pm.expect(pm.response.code).to.equal(201);",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson.success).to.be.true;",
+                  "    pm.expect(responseJson.data.storyTypeId).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Daily Challenge (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Superhero Week\",\n  \"description\": \"Create your own superhero! What special powers do they have? How do they help others?\",\n  \"promptText\": \"Tell us about your superhero and their first big adventure\",\n  \"challengeImageUrl\": \"https://example.com/challenges/superhero.jpg\",\n  \"startDate\": \"{{$isoTimestamp}}\",\n  \"endDate\": \"2024-02-01T23:59:59.000Z\",\n  \"suggestedStoryTypes\": [\"superhero\", \"adventure\"],\n  \"rewards\": {\n    \"experiencePoints\": 75,\n    \"badge\": \"superhero_creator\",\n    \"title\": \"Superhero Creator\"\n  },\n  \"difficultyLevel\": 2\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stories/challenges",
+              "host": ["{{baseUrl}}"],
+              "path": ["stories", "challenges"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Admin can create daily challenge', function () {",
+                  "    pm.expect(pm.response.code).to.equal(201);",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson.success).to.be.true;",
+                  "    pm.expect(responseJson.data.challengeId).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Performance Tests",
+      "item": [
+        {
+          "name": "Story Types Load Test",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/stories/types",
+              "host": ["{{baseUrl}}"],
+              "path": ["stories", "types"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Story types load quickly', function () {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "    pm.expect(pm.response.responseTime).to.be.below(1000);",
+                  "});",
+                  "",
+                  "pm.test('Returns complete story type data', function () {",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson.data.storyTypes.length).to.be.greaterThan(5);",
+                  "    ",
+                  "    responseJson.data.storyTypes.forEach(type => {",
+                  "        pm.expect(type.characteristics.length).to.be.greaterThan(0);",
+                  "        pm.expect(type.aiPromptTemplate).to.be.an('object');",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Multiple Story Creation Test",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"storyTypeId\": \"{{storyTypeId}}\",\n  \"userPrompt\": \"A quick test story for performance testing - iteration {{$randomInt}}\",\n  \"length\": \"short\",\n  \"language\": \"en\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stories/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["stories", "create"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Handles concurrent story creation', function () {",
+                  "    pm.expect(pm.response.code).to.equal(201);",
+                  "    pm.expect(pm.response.responseTime).to.be.below(3000);",
+                  "});",
+                  "",
+                  "pm.test('System remains stable under load', function () {",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson.success).to.be.true;",
+                  "    pm.expect(responseJson.data.storyId).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -12,6 +12,7 @@ const { errorHandler } = require('./middleware/errorHandler');
 const { requestLogger } = require('./middleware/requestLogger');
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/user');
+const storyRoutes = require('./routes/story'); // ← Add this line
 const logger = require('./utils/logger');
 
 const app = express();
@@ -88,6 +89,7 @@ app.get('/health', (req, res) => {
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
+app.use('/api/v1/stories', storyRoutes); // ← Add this line
 
 // 404 handler
 app.use((req, res) => {
