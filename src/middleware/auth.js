@@ -56,11 +56,20 @@ const protect = asyncHandler(async (req, res, next) => {
         emailVerified: userRecord.emailVerified
       };
       
-      // If JWT has sessionId, verify it matches current session
-      if (decoded.sessionId && req.sessionID !== decoded.sessionId) {
-        console.log('JWT session mismatch');
-        throw new AppError('Token session mismatch', 401);
-      }
+      // supporting both session-based auth and JWT
+      // if (decoded.sessionId) {
+      //   if (req.session && req.sessionID) {
+      //     if (req.sessionID !== decoded.sessionId) {
+      //       console.log('JWT session mismatch with req.sessionID');
+      //       throw new AppError('Token session mismatch', 401);
+      //     }
+      //   } else {
+      //     console.log('JWT contains sessionId, but no session present on request');
+      //     // Decide: do you want to allow this, or require active session?
+      //     // For now, let’s allow it
+      //   }
+      // }
+
       
     } catch (error) {
       console.log('JWT authentication error:', error.message);
