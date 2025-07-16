@@ -1,0 +1,16 @@
+---
+deployment:
+  tasks:
+    # Install dependencies
+    - export DEPLOYPATH=/home6/lumynexl/repositories/pictotaleserver 
+    - cd $DEPLOYPATH
+    - npm install --production
+    
+    # Set proper permissions
+    - chmod -R 755 $DEPLOYPATH
+    
+    # Restart Node.js application
+    - /usr/bin/killall -u username node || true
+    - sleep 2
+    
+    # The Node.js app will auto-restart through cPanel's process manager
