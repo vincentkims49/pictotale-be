@@ -7,12 +7,13 @@ const mongoSanitize = require('express-mongo-sanitize');
 const hpp = require('hpp');
 const session = require('express-session');
 const MongoStore = require('connect-mongo');
-const { initializeFirebase } = require('./config/firebase');
-const { errorHandler } = require('./middleware/errorHandler');
-const { requestLogger } = require('./middleware/requestLogger');
-const authRoutes = require('./routes/auth');
-const userRoutes = require('./routes/user');
-const logger = require('./utils/logger');
+const { initializeFirebase } = require('./src/config/firebase');
+const { errorHandler } = require('./src/middleware/errorHandler');
+const { requestLogger } = require('./src/middleware/requestLogger');
+const authRoutes = require('./src/routes/auth');
+const userRoutes = require('./src/routes/user');
+const storyRoutes = require('./src/routes/story'); // ← Add this line
+const logger = require('./src/utils/logger');
 
 const app = express();
 
@@ -88,6 +89,7 @@ app.get('/health', (req, res) => {
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
+app.use('/api/v1/stories', storyRoutes); // ← Add this line
 
 // 404 handler
 app.use((req, res) => {
