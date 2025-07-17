@@ -8,6 +8,7 @@ const { asyncHandler } = require('../utils/asyncHandler');
 const { AppError } = require('../utils/AppError');
 const { sendEmail } = require('../utils/email');
 const redis = require('../config/redis');
+const logger = require('../utils/logger');
 
 const signToken = (uid, email, role) => {
   return jwt.sign(
@@ -17,18 +18,18 @@ const signToken = (uid, email, role) => {
   );
 };
 
+// -- Register
 exports.register = asyncHandler(async (req, res, next) => {
   const { email, password, displayName } = req.body;
-  
-  // Create user in Firebase Auth
+  logger.info(`Registering new user: ${email}`);
+
   const userRecord = await getAuth().createUser({
     email,
     password,
     displayName,
     emailVerified: false
   });
-  
-  // Store additional user data in Firestore
+
   const db = getFirestore();
   await db.collection('users').doc(userRecord.uid).set({
     email,
@@ -40,87 +41,70 @@ exports.register = asyncHandler(async (req, res, next) => {
     emailVerified: false,
     twoFactorEnabled: false
   });
-  
-  // Generate email verification token
+
   const verifyToken = crypto.randomBytes(32).toString('hex');
-  try {
-    await redis.setex(
-      `email_verify_${verifyToken}`,
-      24 * 60 * 60, // 24 hours
-      userRecord.uid
-    );
-  } catch (redisError) {
-    console.warn('Redis not available for email verification token');
-  }
-  
-  // Send verification email
-  try {
-    const verifyUrl = `${process.env.FRONTEND_URL}/verify-email/${verifyToken}`;
-    await sendEmail({
-      email,
-      subject: 'Email Verification',
-      message: `Please verify your email by clicking: ${verifyUrl}`
-    });
-  } catch (emailError) {
-    console.warn('Email sending failed:', emailError.message);
-  }
-  
+  await redis.setex(`email_verify_${verifyToken}`, 86400, userRecord.uid).catch(err =>
+    logger.warn('Redis not available for email verification token:', err.message)
+  );
+
+  const verifyUrl = `${process.env.FRONTEND_URL}/verify-email/${verifyToken}`;
+  await sendEmail({
+    email,
+    subject: 'Email Verification',
+    message: `Please verify your email by clicking: ${verifyUrl}`
+  }).catch(err => logger.warn('Email sending failed:', err.message));
+
   res.status(201).json({
     success: true,
     message: 'User registered successfully. Please verify your email.'
   });
 });
 
+// -- Login
 exports.login = asyncHandler(async (req, res, next) => {
   const { email, password } = req.body;
-  
-  // Get user from Firestore
+  logger.info(`Login attempt: ${email}`);
+
   const db = getFirestore();
-  const usersRef = db.collection('users');
-  const snapshot = await usersRef.where('email', '==', email).limit(1).get();
-  
+  const snapshot = await db.collection('users').where('email', '==', email).limit(1).get();
+
   if (snapshot.empty) {
+    logger.warn(`Login failed: No user found with email ${email}`);
     throw new AppError('Invalid credentials', 401);
   }
-  
+
   const userDoc = snapshot.docs[0];
   const userData = userDoc.data();
-  
-  // Verify user exists in Firebase Auth
+
   let userRecord;
   try {
     userRecord = await getAuth().getUserByEmail(email);
-  } catch (error) {
+  } catch {
+    logger.warn(`Firebase Auth user not found: ${email}`);
     throw new AppError('Invalid credentials', 401);
   }
-  
-  // Check if email is verified
+
   if (!userData.emailVerified) {
+    logger.warn(`Email not verified for ${email}`);
     throw new AppError('Please verify your email before logging in', 401);
   }
-  
-  // Check if 2FA is enabled
+
   if (userData.twoFactorEnabled) {
-    // Generate temporary token for 2FA verification
     const tempToken = crypto.randomBytes(32).toString('hex');
-    try {
-      await redis.setex(
-        `2fa_temp_${tempToken}`,
-        5 * 60, // 5 minutes
-        JSON.stringify({ uid: userRecord.uid, email: userRecord.email, role: userData.role })
-      );
-    } catch (redisError) {
-      console.warn('Redis not available for 2FA temp token');
-    }
-    
+    await redis.setex(
+      `2fa_temp_${tempToken}`,
+      300,
+      JSON.stringify({ uid: userRecord.uid, email: userRecord.email, role: userData.role })
+    ).catch(err => logger.warn('Redis not available for 2FA temp token:', err.message));
+
+    logger.info(`2FA temp token issued for ${email}`);
     return res.status(200).json({
       success: true,
       requiresTwoFactor: true,
       tempToken
     });
   }
-  
-  // Create session in MongoDB via Express session
+
   req.session.user = {
     uid: userRecord.uid,
     email: userRecord.email,
@@ -128,10 +112,9 @@ exports.login = asyncHandler(async (req, res, next) => {
     loginTime: new Date().toISOString(),
     isAuthenticated: true
   };
-  
-  // Also create JWT token for API access
+
   const token = jwt.sign(
-    { 
+    {
       uid: userRecord.uid,
       email: userRecord.email,
       role: userData.role,
@@ -140,27 +123,17 @@ exports.login = asyncHandler(async (req, res, next) => {
     process.env.JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRE }
   );
-  
-  // Update last login
-  await userDoc.ref.update({
-    lastLogin: new Date().toISOString()
-  });
-  
-  // Set cookie
-  const cookieOptions = {
-    expires: new Date(
-      Date.now() + process.env.JWT_COOKIE_EXPIRE * 24 * 60 * 60 * 1000
-    ),
+
+  await userDoc.ref.update({ lastLogin: new Date().toISOString() });
+  logger.info(`User logged in: ${email}, session: ${req.sessionID}`);
+
+  res.cookie('token', token, {
+    expires: new Date(Date.now() + process.env.JWT_COOKIE_EXPIRE * 86400000),
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict'
-  };
-  
-  res.cookie('token', token, cookieOptions);
-  
-  console.log('Session created:', req.sessionID);
-  console.log('Session data:', req.session.user);
-  
+  });
+
   res.status(200).json({
     success: true,
     token,
@@ -175,348 +148,245 @@ exports.login = asyncHandler(async (req, res, next) => {
   });
 });
 
+// -- Logout
 exports.logout = asyncHandler(async (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1] || req.cookies.token;
-  
+
   if (token) {
-    // Add token to blacklist
     const decoded = jwt.decode(token);
     const ttl = decoded.exp - Math.floor(Date.now() / 1000);
     if (ttl > 0) {
-      try {
-        await redis.setex(`blacklist_${token}`, ttl, '1');
-      } catch (redisError) {
-        console.warn('Redis not available for token blacklist');
-      }
+      await redis.setex(`blacklist_${token}`, ttl, '1').catch(err =>
+        logger.warn('Redis not available for token blacklist:', err.message)
+      );
     }
   }
-  
-  // Destroy MongoDB session
+
   req.session.destroy((err) => {
-    if (err) {
-      console.error('Session destruction error:', err);
-    } else {
-      console.log('Session destroyed successfully');
-    }
+    if (err) logger.error('Session destruction error:', err);
+    else logger.info(`Session destroyed: ${req.sessionID}`);
   });
-  
+
   res.cookie('token', 'none', {
     expires: new Date(Date.now() + 10 * 1000),
     httpOnly: true
   });
-  
+
   res.status(200).json({
     success: true,
     message: 'Logged out successfully'
   });
 });
 
+// -- Logout All
 exports.logoutAll = asyncHandler(async (req, res, next) => {
-  // Revoke all refresh tokens for the user
   await getAuth().revokeRefreshTokens(req.user.uid);
-  
-  // Destroy current session
+
   req.session.destroy((err) => {
-    if (err) {
-      console.error('Session destruction error:', err);
-    }
+    if (err) logger.error('Session destruction error:', err);
+    else logger.info(`All sessions revoked for user: ${req.user.uid}`);
   });
-  
+
   res.status(200).json({
     success: true,
     message: 'Logged out from all devices'
   });
 });
 
+// -- Forgot Password
 exports.forgotPassword = asyncHandler(async (req, res, next) => {
   const { email } = req.body;
-  
-  // Verify user exists
   const userRecord = await getAuth().getUserByEmail(email);
-  
-  // Generate reset token
+
   const resetToken = crypto.randomBytes(32).toString('hex');
-  const hashedToken = crypto
-    .createHash('sha256')
-    .update(resetToken)
-    .digest('hex');
-  
-  // Store token in Redis with 1 hour expiry
-  try {
-    await redis.setex(
-      `password_reset_${hashedToken}`,
-      60 * 60,
-      userRecord.uid
-    );
-  } catch (redisError) {
-    console.warn('Redis not available for password reset token');
-  }
-  
-  // Send reset email
-  try {
-    const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
-    await sendEmail({
-      email,
-      subject: 'Password Reset Request',
-      message: `Reset your password by clicking: ${resetUrl}`
-    });
-  } catch (emailError) {
-    console.warn('Email sending failed:', emailError.message);
-  }
-  
+  const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+
+  await redis.setex(`password_reset_${hashedToken}`, 3600, userRecord.uid).catch(err =>
+    logger.warn('Redis not available for password reset token:', err.message)
+  );
+
+  const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+  await sendEmail({
+    email,
+    subject: 'Password Reset Request',
+    message: `Reset your password by clicking: ${resetUrl}`
+  }).catch(err => logger.warn('Email sending failed:', err.message));
+
   res.status(200).json({
     success: true,
     message: 'Password reset email sent'
   });
 });
 
+// -- Reset Password
 exports.resetPassword = asyncHandler(async (req, res, next) => {
   const { token } = req.params;
   const { password } = req.body;
-  
-  // Hash token
-  const hashedToken = crypto
-    .createHash('sha256')
-    .update(token)
-    .digest('hex');
-  
-  // Get user from token
+
+  const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
   const uid = await redis.get(`password_reset_${hashedToken}`);
-  if (!uid) {
-    throw new AppError('Invalid or expired reset token', 400);
-  }
-  
-  // Update password
+
+  if (!uid) throw new AppError('Invalid or expired reset token', 400);
+
   await getAuth().updateUser(uid, { password });
-  
-  // Delete reset token
-  try {
-    await redis.del(`password_reset_${hashedToken}`);
-  } catch (redisError) {
-    console.warn('Redis not available for token deletion');
-  }
-  
+
+  await redis.del(`password_reset_${hashedToken}`).catch(err =>
+    logger.warn('Redis not available for reset token cleanup:', err.message)
+  );
+
   res.status(200).json({
     success: true,
     message: 'Password reset successful'
   });
 });
 
+// -- Verify Email
 exports.verifyEmail = asyncHandler(async (req, res, next) => {
   const { token } = req.params;
-  
-  // Get user from token
   const uid = await redis.get(`email_verify_${token}`);
-  if (!uid) {
-    throw new AppError('Invalid or expired verification token', 400);
-  }
-  
-  // Update email verification status
+
+  if (!uid) throw new AppError('Invalid or expired verification token', 400);
+
   await getAuth().updateUser(uid, { emailVerified: true });
-  
+
   const db = getFirestore();
   await db.collection('users').doc(uid).update({
     emailVerified: true,
     emailVerifiedAt: new Date().toISOString()
   });
-  
-  // Delete verification token
-  try {
-    await redis.del(`email_verify_${token}`);
-  } catch (redisError) {
-    console.warn('Redis not available for token deletion');
-  }
-  
+
+  await redis.del(`email_verify_${token}`).catch(err =>
+    logger.warn('Redis cleanup failed for email verify token:', err.message)
+  );
+
+  logger.info(`Email verified: ${uid}`);
+
   res.status(200).json({
     success: true,
     message: 'Email verified successfully'
   });
 });
 
+// -- Resend Verification
 exports.resendVerification = asyncHandler(async (req, res, next) => {
   const { email } = req.body;
-  
   const userRecord = await getAuth().getUserByEmail(email);
-  
+
   if (userRecord.emailVerified) {
     throw new AppError('Email is already verified', 400);
   }
-  
-  // Generate new verification token
+
   const verifyToken = crypto.randomBytes(32).toString('hex');
-  try {
-    await redis.setex(
-      `email_verify_${verifyToken}`,
-      24 * 60 * 60,
-      userRecord.uid
-    );
-  } catch (redisError) {
-    console.warn('Redis not available for email verification token');
-  }
-  
-  // Send verification email
-  try {
-    const verifyUrl = `${process.env.FRONTEND_URL}/verify-email/${verifyToken}`;
-    await sendEmail({
-      email,
-      subject: 'Email Verification',
-      message: `Please verify your email by clicking: ${verifyUrl}`
-    });
-  } catch (emailError) {
-    console.warn('Email sending failed:', emailError.message);
-  }
-  
+  await redis.setex(`email_verify_${verifyToken}`, 86400, userRecord.uid).catch(err =>
+    logger.warn('Redis not available for email verification token:', err.message)
+  );
+
+  const verifyUrl = `${process.env.FRONTEND_URL}/verify-email/${verifyToken}`;
+  await sendEmail({
+    email,
+    subject: 'Email Verification',
+    message: `Please verify your email by clicking: ${verifyUrl}`
+  }).catch(err => logger.warn('Email sending failed:', err.message));
+
+  logger.info(`Verification email resent to ${email}`);
+
   res.status(200).json({
     success: true,
     message: 'Verification email sent'
   });
 });
 
+// -- Update Password
 exports.updatePassword = asyncHandler(async (req, res, next) => {
   const { currentPassword, newPassword } = req.body;
-  
-  // Verify current password by attempting to sign in
-  // This is a workaround since Firebase Admin SDK doesn't provide password verification
-  // In production, you might want to use Firebase Client SDK for this
-  
+
+  // Firebase Admin SDK doesn't support password check.
+  // In production, you'd verify using Firebase Auth client on frontend.
   await getAuth().updateUser(req.user.uid, { password: newPassword });
-  
+
   res.status(200).json({
     success: true,
     message: 'Password updated successfully'
   });
 });
 
+// -- Update Email
 exports.updateEmail = asyncHandler(async (req, res, next) => {
-  const { newEmail, password } = req.body;
-  
-  // Update email in Firebase Auth
+  const { newEmail } = req.body;
+
+  // Update Firebase Auth
   await getAuth().updateUser(req.user.uid, {
     email: newEmail,
     emailVerified: false
   });
-  
-  // Update email in Firestore
+
   const db = getFirestore();
   await db.collection('users').doc(req.user.uid).update({
     email: newEmail,
     emailVerified: false,
     emailUpdatedAt: new Date().toISOString()
   });
-  
-  // Update session
+
   if (req.session.user) {
     req.session.user.email = newEmail;
   }
-  
-  // Send verification email to new address
+
   const verifyToken = crypto.randomBytes(32).toString('hex');
-  try {
-    await redis.setex(
-      `email_verify_${verifyToken}`,
-      24 * 60 * 60,
-      req.user.uid
-    );
-  } catch (redisError) {
-    console.warn('Redis not available for email verification token');
-  }
-  
-  try {
-    const verifyUrl = `${process.env.FRONTEND_URL}/verify-email/${verifyToken}`;
-    await sendEmail({
-      email: newEmail,
-      subject: 'Verify Your New Email Address',
-      message: `Please verify your new email by clicking: ${verifyUrl}`
-    });
-  } catch (emailError) {
-    console.warn('Email sending failed:', emailError.message);
-  }
-  
+  await redis.setex(`email_verify_${verifyToken}`, 86400, req.user.uid).catch(err =>
+    logger.warn('Redis not available for email verification token:', err.message)
+  );
+
+  const verifyUrl = `${process.env.FRONTEND_URL}/verify-email/${verifyToken}`;
+  await sendEmail({
+    email: newEmail,
+    subject: 'Verify Your New Email Address',
+    message: `Please verify your new email by clicking: ${verifyUrl}`
+  }).catch(err => logger.warn('Email sending failed:', err.message));
+
   res.status(200).json({
     success: true,
     message: 'Email updated. Please verify your new email address.'
   });
 });
 
-exports.getMe = asyncHandler(async (req, res, next) => {
-  const db = getFirestore();
-  const userDoc = await db.collection('users').doc(req.user.uid).get();
-  
-  if (!userDoc.exists) {
-    throw new AppError('User not found', 404);
-  }
-  
-  // Include session info
-  const sessionInfo = req.session.user ? {
-    sessionId: req.sessionID,
-    loginTime: req.session.user.loginTime,
-    sessionActive: true
-  } : {
-    sessionActive: false
-  };
-  
-  res.status(200).json({
-    success: true,
-    data: {
-      user: {
-        uid: req.user.uid,
-        ...userDoc.data()
-      },
-      session: sessionInfo
-    }
-  });
-});
-
+// -- Delete Account (Soft delete)
 exports.deleteAccount = asyncHandler(async (req, res, next) => {
-  const { password } = req.body;
-  
-  // Soft delete in Firestore
   const db = getFirestore();
+
   await db.collection('users').doc(req.user.uid).update({
     isActive: false,
     deletedAt: new Date().toISOString()
   });
-  
-  // Schedule hard delete after 30 days (implement separately)
-  // In production, you might want to use Cloud Functions for this
-  
-  // Disable user in Firebase Auth
+
   await getAuth().updateUser(req.user.uid, { disabled: true });
-  
-  // Destroy session
+
   req.session.destroy((err) => {
-    if (err) {
-      console.error('Session destruction error:', err);
-    }
+    if (err) logger.error('Session destruction error:', err);
   });
-  
+
   res.status(200).json({
     success: true,
     message: 'Account deleted successfully'
   });
 });
 
+// -- Enable 2FA
 exports.enable2FA = asyncHandler(async (req, res, next) => {
-  // Generate secret
   const secret = speakeasy.generateSecret({
     name: `PictoTale (${req.user.email})`,
     length: 32
   });
-  
-  // Store secret temporarily
-  try {
-    await redis.setex(
-      `2fa_setup_${req.user.uid}`,
-      10 * 60, // 10 minutes
-      secret.base32
-    );
-  } catch (redisError) {
-    console.warn('Redis not available for 2FA setup');
-  }
-  
-  // Generate QR code
+
+  await redis.setex(
+    `2fa_setup_${req.user.uid}`,
+    600,
+    secret.base32
+  ).catch(err =>
+    logger.warn('Redis not available for 2FA setup:', err.message)
+  );
+
   const qrCode = await QRCode.toDataURL(secret.otpauth_url);
-  
+
   res.status(200).json({
     success: true,
     data: {
@@ -526,49 +396,38 @@ exports.enable2FA = asyncHandler(async (req, res, next) => {
   });
 });
 
+// -- Verify 2FA (both setup & login)
 exports.verify2FA = asyncHandler(async (req, res, next) => {
   const { token, tempToken } = req.body;
-  
   let secret, uid, userData;
-  
+
   if (tempToken) {
-    // Login flow
     const tempData = await redis.get(`2fa_temp_${tempToken}`);
-    if (!tempData) {
-      throw new AppError('Invalid or expired temporary token', 400);
-    }
-    
+    if (!tempData) throw new AppError('Invalid or expired temporary token', 400);
+
     const data = JSON.parse(tempData);
     uid = data.uid;
     userData = data;
-    
-    // Get user's 2FA secret
+
     const db = getFirestore();
     const userDoc = await db.collection('users').doc(uid).get();
     secret = userDoc.data().twoFactorSecret;
   } else {
-    // Setup flow
     uid = req.user.uid;
     secret = await redis.get(`2fa_setup_${uid}`);
-    if (!secret) {
-      throw new AppError('2FA setup expired. Please try again', 400);
-    }
+    if (!secret) throw new AppError('2FA setup expired. Please try again', 400);
   }
-  
-  // Verify token
+
   const verified = speakeasy.totp.verify({
     secret,
     encoding: 'base32',
     token,
     window: 2
   });
-  
-  if (!verified) {
-    throw new AppError('Invalid 2FA token', 400);
-  }
-  
+
+  if (!verified) throw new AppError('Invalid 2FA token', 400);
+
   if (tempToken) {
-    // Complete login - create session
     req.session.user = {
       uid: userData.uid,
       email: userData.email,
@@ -576,15 +435,11 @@ exports.verify2FA = asyncHandler(async (req, res, next) => {
       loginTime: new Date().toISOString(),
       isAuthenticated: true
     };
-    
-    try {
-      await redis.del(`2fa_temp_${tempToken}`);
-    } catch (redisError) {
-      console.warn('Redis not available for token deletion');
-    }
-    
+
+    await redis.del(`2fa_temp_${tempToken}`).catch(() => {});
+
     const authToken = jwt.sign(
-      { 
+      {
         uid: userData.uid,
         email: userData.email,
         role: userData.role,
@@ -593,20 +448,17 @@ exports.verify2FA = asyncHandler(async (req, res, next) => {
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRE }
     );
-    
-    // Set cookie
-    const cookieOptions = {
+
+    res.cookie('token', authToken, {
       expires: new Date(
         Date.now() + process.env.JWT_COOKIE_EXPIRE * 24 * 60 * 60 * 1000
       ),
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict'
-    };
-    
-    res.cookie('token', authToken, cookieOptions);
-    
-    res.status(200).json({
+    });
+
+    return res.status(200).json({
       success: true,
       token: authToken,
       sessionId: req.sessionID,
@@ -619,92 +471,117 @@ exports.verify2FA = asyncHandler(async (req, res, next) => {
       }
     });
   } else {
-    // Complete setup
     const db = getFirestore();
     await db.collection('users').doc(uid).update({
       twoFactorEnabled: true,
       twoFactorSecret: secret
     });
-    
-    try {
-      await redis.del(`2fa_setup_${uid}`);
-    } catch (redisError) {
-      console.warn('Redis not available for token deletion');
-    }
-    
-    res.status(200).json({
+
+    await redis.del(`2fa_setup_${uid}`).catch(() => {});
+
+    return res.status(200).json({
       success: true,
       message: '2FA enabled successfully'
     });
   }
 });
 
+// -- Disable 2FA
 exports.disable2FA = asyncHandler(async (req, res, next) => {
-  const { password, token } = req.body;
-  
-  // Get user's 2FA secret
+  const { token } = req.body;
+
   const db = getFirestore();
   const userDoc = await db.collection('users').doc(req.user.uid).get();
   const { twoFactorSecret } = userDoc.data();
-  
-  // Verify 2FA token
+
   const verified = speakeasy.totp.verify({
     secret: twoFactorSecret,
     encoding: 'base32',
     token,
     window: 2
   });
-  
-  if (!verified) {
-    throw new AppError('Invalid 2FA token', 400);
-  }
-  
-  // Disable 2FA
+
+  if (!verified) throw new AppError('Invalid 2FA token', 400);
+
   await userDoc.ref.update({
     twoFactorEnabled: false,
     twoFactorSecret: null
   });
-  
+
   res.status(200).json({
     success: true,
     message: '2FA disabled successfully'
   });
 });
 
+// -- Refresh Token
 exports.refreshToken = asyncHandler(async (req, res, next) => {
   const { refreshToken } = req.body;
-  
-  if (!refreshToken) {
-    throw new AppError('Refresh token is required', 400);
-  }
-  
+
+  if (!refreshToken) throw new AppError('Refresh token is required', 400);
+
   try {
-    // Verify the current token
     const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
-    
-    // Check if session still exists
+
     if (!req.session.user || req.session.user.uid !== decoded.uid) {
       throw new AppError('Session expired', 401);
     }
-    
-    // Generate new access token
-    const newToken = signToken(decoded.uid, decoded.email, decoded.role);
-    
+
+    const newToken = jwt.sign(
+      {
+        uid: decoded.uid,
+        email: decoded.email,
+        role: decoded.role,
+        sessionId: req.sessionID
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRE }
+    );
+
     res.status(200).json({
       success: true,
       token: newToken
     });
-  } catch (error) {
+  } catch (err) {
     throw new AppError('Invalid refresh token', 401);
   }
 });
 
-// Get all active sessions for a user (admin function)
+// -- Get Current User
+exports.getMe = asyncHandler(async (req, res, next) => {
+  const db = getFirestore();
+  const userDoc = await db.collection('users').doc(req.user.uid).get();
+
+  if (!userDoc.exists) throw new AppError('User not found', 404);
+
+  const sessionInfo = req.session.user
+    ? {
+        sessionId: req.sessionID,
+        loginTime: req.session.user.loginTime,
+        sessionActive: true
+      }
+    : {
+        sessionActive: false
+      };
+
+  res.status(200).json({
+    success: true,
+    data: {
+      user: {
+        uid: req.user.uid,
+        ...userDoc.data()
+      },
+      session: sessionInfo
+    }
+  });
+});
+
+// -- Admin: Get All Sessions for User (stub / extend with DB tracking if needed)
 exports.getUserSessions = asyncHandler(async (req, res, next) => {
   const { userId } = req.params;
-  
-  // This would require additional session tracking in your database
-  // For now, we'll just return current session info
+
+  // If session tracking system is added, fetch from DB.
+  // Currently stubbed to only show current session.
   res.status(200).json({
     success: true,
     data: {
