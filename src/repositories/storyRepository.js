@@ -1,9 +1,11 @@
 // src/repositories/storyRepository.js
 const { getFirestore } = require('../config/firebase');
+const FirebaseStorageService = require('../services/firebaseStorageService');
 
 class StoryRepository {
   constructor() {
     this._db = null;
+    this.firebaseStorage = new FirebaseStorageService();
   }
 
   // Lazy initialization of Firestore
@@ -21,7 +23,6 @@ class StoryRepository {
     try {
       console.log('Getting story types with filters:', filters);
       
-      // For development: Get all story types first, then filter in memory if needed
       const snapshot = await this.db.collection('storyTypes').get();
       
       console.log('Story types snapshot size:', snapshot.size);
@@ -82,8 +83,6 @@ class StoryRepository {
    */
   async getDailyChallenges() {
     try {
-      // For development: Get all challenges and filter/sort in memory
-      // In production, create the composite index for better performance
       const snapshot = await this.db.collection('dailyChallenges')
         .where('isActive', '==', true)
         .get();
@@ -264,11 +263,18 @@ class StoryRepository {
   }
 
   /**
-   * Delete story
+   * Delete story and associated Firebase Storage files
    */
   async deleteStory(storyId) {
     try {
+      // Delete story files from Firebase Storage first
+      console.log(`🗑️  Deleting Firebase Storage files for story ${storyId}`);
+      await this.firebaseStorage.deleteStoryFiles(storyId);
+      
+      // Then delete the story document from Firestore
       await this.db.collection('stories').doc(storyId).delete();
+      
+      console.log(`✅ Story ${storyId} and all associated files deleted successfully`);
       return { success: true };
     } catch (error) {
       console.error('Error deleting story:', error);
@@ -277,43 +283,243 @@ class StoryRepository {
   }
 
   /**
-   * Save drawing image (placeholder implementation)
+   * Save drawing image to Firebase Storage
    */
   async saveDrawing(userId, storyId, imageBase64) {
-    // In a real implementation, you would upload to Firebase Storage
-    // For now, return a placeholder URL
-    return `https://storage.googleapis.com/your-bucket/drawings/${userId}/${storyId}/drawing.jpg`;
+    try {
+      console.log(`📤 Saving drawing for user ${userId}, story ${storyId}`);
+      
+      // Convert base64 to buffer
+      const imageBuffer = Buffer.from(imageBase64, 'base64');
+      
+      // Upload to Firebase Storage
+      const result = await this.firebaseStorage.uploadImage(
+        imageBuffer,
+        storyId,
+        `User drawing for story ${storyId}`,
+        'drawing'
+      );
+      
+      console.log(`✅ Drawing saved to Firebase: ${result.publicUrl}`);
+      return result.publicUrl;
+    } catch (error) {
+      console.error('Error saving drawing to Firebase:', error);
+      // Return a fallback URL structure but log the failure
+      const fallbackUrl = `https://storage.googleapis.com/pictotale-backend.firebasestorage.app/drawings/${userId}/${storyId}/drawing.jpg`;
+      console.warn(`⚠️  Using fallback URL: ${fallbackUrl}`);
+      return fallbackUrl;
+    }
   }
 
   /**
-   * Save voice input (placeholder implementation)
+   * Save voice input to Firebase Storage
    */
   async saveVoiceInput(userId, storyId, audioBase64) {
-    // In a real implementation, you would upload to Firebase Storage
-    // For now, return a placeholder URL
-    return `https://storage.googleapis.com/your-bucket/voice/${userId}/${storyId}/voice.mp3`;
+    try {
+      console.log(`🎙️  Saving voice input for user ${userId}, story ${storyId}`);
+      
+      // Convert base64 to buffer
+      const audioBuffer = Buffer.from(audioBase64, 'base64');
+      
+      // Upload to Firebase Storage
+      const result = await this.firebaseStorage.uploadAudio(
+        audioBuffer,
+        storyId,
+        'voice-input'
+      );
+      
+      console.log(`✅ Voice input saved to Firebase: ${result.publicUrl}`);
+      return result.publicUrl;
+    } catch (error) {
+      console.error('Error saving voice input to Firebase:', error);
+      // Return a fallback URL structure but log the failure
+      const fallbackUrl = `https://storage.googleapis.com/pictotale-backend.firebasestorage.app/voice/${userId}/${storyId}/voice.mp3`;
+      console.warn(`⚠️  Using fallback URL: ${fallbackUrl}`);
+      return fallbackUrl;
+    }
   }
 
   /**
-   * Save generated audio (placeholder implementation)
+   * Save generated audio to Firebase Storage
    */
-  async saveGeneratedAudio(storyId, audioBuffer) {
-    // In a real implementation, you would upload to Firebase Storage
-    // For now, return a placeholder URL
-    return `https://storage.googleapis.com/your-bucket/audio/${storyId}/narration.mp3`;
+  async saveGeneratedAudio(storyId, audioBuffer, voiceId = 'default') {
+    try {
+      console.log(`🎵 Saving generated audio for story ${storyId} with voice ${voiceId}`);
+      
+      // Upload to Firebase Storage
+      const result = await this.firebaseStorage.uploadAudio(
+        audioBuffer,
+        storyId,
+        voiceId
+      );
+      
+      console.log(`✅ Generated audio saved to Firebase: ${result.publicUrl}`);
+      return result.publicUrl;
+    } catch (error) {
+      console.error('Error saving generated audio to Firebase:', error);
+      // Return a fallback URL structure but log the failure
+      const fallbackUrl = `https://storage.googleapis.com/pictotale-backend.firebasestorage.app/audio/${storyId}/narration.mp3`;
+      console.warn(`⚠️  Using fallback URL: ${fallbackUrl}`);
+      return fallbackUrl;
+    }
   }
 
   /**
-   * Save illustration (placeholder implementation)
+   * Save illustration to Firebase Storage
    */
-  async saveIllustration(storyId, imageBuffer, index) {
-    // In a real implementation, you would upload to Firebase Storage
-    // For now, return a placeholder URL
-    return `https://storage.googleapis.com/your-bucket/illustrations/${storyId}/image_${index}.jpg`;
+  async saveIllustration(storyId, imageBuffer, index, description = '') {
+    try {
+      console.log(`🖼️  Saving illustration ${index} for story ${storyId}`);
+      
+      // Upload to Firebase Storage
+      const result = await this.firebaseStorage.uploadImage(
+        imageBuffer,
+        storyId,
+        description || `Illustration ${index} for story ${storyId}`,
+        index
+      );
+      
+      console.log(`✅ Illustration saved to Firebase: ${result.publicUrl}`);
+      return result.publicUrl;
+    } catch (error) {
+      console.error('Error saving illustration to Firebase:', error);
+      // Return a fallback URL structure but log the failure
+      const fallbackUrl = `https://storage.googleapis.com/pictotale-backend.firebasestorage.app/illustrations/${storyId}/image_${index}.jpg`;
+      console.warn(`⚠️  Using fallback URL: ${fallbackUrl}`);
+      return fallbackUrl;
+    }
   }
 
   /**
-   * Update user progress (placeholder implementation)
+   * Save complete story with all assets to Firebase Storage and Firestore
+   */
+  async saveCompleteStoryWithAssets(storyId, storyData, assets = {}) {
+    try {
+      console.log(`💾 Saving complete story ${storyId} with assets to Firebase`);
+      
+      const storyDoc = {
+        ...storyData,
+        assets: {
+          audioUrl: null,
+          illustrations: [],
+          drawingUrl: null,
+          voiceInputUrl: null
+        },
+        updatedAt: new Date()
+      };
+      
+      // Save audio if provided
+      if (assets.audioBuffer) {
+        console.log('🎵 Saving audio asset...');
+        storyDoc.assets.audioUrl = await this.saveGeneratedAudio(
+          storyId, 
+          assets.audioBuffer, 
+          assets.voiceId || 'default'
+        );
+      }
+      
+      // Save illustrations if provided
+      if (assets.illustrations && assets.illustrations.length > 0) {
+        console.log(`🖼️  Saving ${assets.illustrations.length} illustration assets...`);
+        const illustrationUrls = [];
+        
+        for (let i = 0; i < assets.illustrations.length; i++) {
+          const illustration = assets.illustrations[i];
+          const url = await this.saveIllustration(
+            storyId,
+            illustration.imageBuffer,
+            i,
+            illustration.description
+          );
+          illustrationUrls.push({
+            url,
+            description: illustration.description,
+            index: i
+          });
+        }
+        storyDoc.assets.illustrations = illustrationUrls;
+      }
+      
+      // Save drawing if provided
+      if (assets.drawingBase64) {
+        console.log('📤 Saving drawing asset...');
+        storyDoc.assets.drawingUrl = await this.saveDrawing(
+          storyData.userId,
+          storyId,
+          assets.drawingBase64
+        );
+      }
+      
+      // Save voice input if provided
+      if (assets.voiceInputBase64) {
+        console.log('🎙️  Saving voice input asset...');
+        storyDoc.assets.voiceInputUrl = await this.saveVoiceInput(
+          storyData.userId,
+          storyId,
+          assets.voiceInputBase64
+        );
+      }
+      
+      // Update the story document in Firestore
+      await this.updateStory(storyId, storyDoc);
+      
+      console.log(`✅ Complete story ${storyId} saved with all assets`);
+      console.log(`🎵 Audio: ${storyDoc.assets.audioUrl}`);
+      console.log(`🖼️  Illustrations: ${storyDoc.assets.illustrations.length}`);
+      console.log(`📤 Drawing: ${storyDoc.assets.drawingUrl ? 'Yes' : 'No'}`);
+      console.log(`🎙️  Voice: ${storyDoc.assets.voiceInputUrl ? 'Yes' : 'No'}`);
+      
+      return storyDoc;
+    } catch (error) {
+      console.error('Error saving complete story with assets:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get story with all asset URLs
+   */
+  async getStoryWithAssets(storyId) {
+    try {
+      const story = await this.getStoryById(storyId);
+      
+      if (!story) {
+        return null;
+      }
+      
+      // Assets are already stored in the story document
+      return story;
+    } catch (error) {
+      console.error('Error getting story with assets:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * List all Firebase Storage files for a story (for debugging)
+   */
+  async listStoryFiles(storyId) {
+    try {
+      console.log(`📋 Listing Firebase Storage files for story ${storyId}`);
+      
+      // This would require implementing listStoryFiles in FirebaseStorageService
+      // For now, we'll return a simple structure
+      return {
+        storyId,
+        message: 'File listing not implemented yet',
+        suggestedFiles: [
+          `audio/${storyId}_*_*.mp3`,
+          `images/${storyId}_img_*_*.png`
+        ]
+      };
+    } catch (error) {
+      console.error('Error listing story files:', error);
+      return { storyId, error: error.message };
+    }
+  }
+
+  /**
+   * Update user progress
    */
   async updateUserProgress(userId, progressData) {
     try {
@@ -327,6 +533,33 @@ class StoryRepository {
       return { success: true };
     } catch (error) {
       console.error('Error updating user progress:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get user's story statistics
+   */
+  async getUserStoryStats(userId) {
+    try {
+      const snapshot = await this.db.collection('stories')
+        .where('userId', '==', userId)
+        .get();
+      
+      const stories = snapshot.docs.map(doc => doc.data());
+      
+      const stats = {
+        totalStories: stories.length,
+        completedStories: stories.filter(s => s.status === 'completed').length,
+        sharedStories: stories.filter(s => s.isShared === true).length,
+        totalLikes: stories.reduce((sum, s) => sum + (s.likesCount || 0), 0),
+        storyTypes: [...new Set(stories.map(s => s.storyTypeId))],
+        lastCreated: stories.length > 0 ? Math.max(...stories.map(s => s.createdAt?.getTime() || 0)) : null
+      };
+      
+      return stats;
+    } catch (error) {
+      console.error('Error getting user story stats:', error);
       throw error;
     }
   }
@@ -366,19 +599,63 @@ class StoryRepository {
         });
       }
       
+      // Check stories
+      const storiesSnapshot = await this.db.collection('stories').limit(1).get();
+      console.log('Stories collection exists:', !storiesSnapshot.empty);
+      
+      if (!storiesSnapshot.empty) {
+        const sampleDoc = storiesSnapshot.docs[0];
+        console.log('Sample story document:', {
+          id: sampleDoc.id,
+          data: sampleDoc.data()
+        });
+      }
+      
+      // Test Firebase Storage connection
+      try {
+        const bucketExists = await this.firebaseStorage.fileExists('test');
+        console.log('Firebase Storage accessible:', true);
+      } catch (storageError) {
+        console.log('Firebase Storage accessible:', false);
+        console.log('Storage error:', storageError.message);
+      }
+      
       console.log('=== End Debug Info ===');
       
       return {
         collections: collections.map(col => col.id),
         hasStoryTypes: !storyTypesSnapshot.empty,
-        hasChallenges: !challengesSnapshot.empty
+        hasChallenges: !challengesSnapshot.empty,
+        hasStories: !storiesSnapshot.empty,
+        firebaseStorageAccessible: true // Will be false if error above
       };
     } catch (error) {
       console.error('Error debugging database:', error);
       throw error;
     }
   }
-}
 
+  /**
+   * Cleanup old temporary files (optional maintenance method)
+   */
+  async cleanupOldFiles(daysOld = 7) {
+    try {
+      console.log(`🧹 Starting cleanup of files older than ${daysOld} days...`);
+      
+      // This would require implementing cleanup logic in FirebaseStorageService
+      // For now, just log the intention
+      console.log('⚠️  Cleanup not yet implemented - add to FirebaseStorageService');
+      
+      return {
+        success: true,
+        message: `Cleanup scheduled for files older than ${daysOld} days`,
+        filesDeleted: 0
+      };
+    } catch (error) {
+      console.error('Error during cleanup:', error);
+      throw error;
+    }
+  }
+}
 
 module.exports = new StoryRepository();

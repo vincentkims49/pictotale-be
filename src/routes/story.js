@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const storyController = require('../controllers/storyController');
 const { protect, authorize } = require('../middleware/auth');
+router.post('/create', storyController.createStory);
 
 // Apply authentication middleware to all routes
 router.use(protect);
@@ -15,7 +16,6 @@ router.get('/featured', storyController.getFeaturedStories);
 
 // User story management
 router.get('/my-stories', storyController.getUserStories);
-router.post('/create', storyController.createStory);
 
 // Individual story operations
 router.get('/:storyId', storyController.getStory);

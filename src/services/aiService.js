@@ -2,12 +2,21 @@
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
+const FirebaseStorageService = require('./firebaseStorageService');
 
 class AIService {
   constructor() {
-    this.openaiApiKey = process.env.OPENAI_API_KEY;
-    this.elevenLabsApiKey = process.env.ELEVENLABS_API_KEY;
-    this.defaultVoiceId = process.env.ELEVENLABS_DEFAULT_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL';
+    this.openaiApiKey = process.env.OPENAI_API_KEY ;
+    this.elevenLabsApiKey = process.env.ELEVENLABS_API_KEY ;
+    this.defaultVoiceId = process.env.ELEVENLABS_DEFAULT_VOICE_ID ;
+    
+    // Initialize Firebase Storage
+    this.firebaseStorage = new FirebaseStorageService();
+    
+    // Retry configuration
+    this.maxRetries = 3;
+    this.baseDelay = 1000; // 1 second
+    this.maxDelay = 10000; // 10 seconds
     
     if (!this.openaiApiKey) {
       console.warn('⚠️  OpenAI API key not found. Story generation will be simulated.');
@@ -19,19 +28,108 @@ class AIService {
   }
 
   /**
+   * Generic retry mechanism with exponential backoff
+   */
+  async withRetry(operation, operationName = 'operation') {
+    let lastError;
+    
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      try {
+        if (attempt > 1) {
+          console.log(`🔄 ${operationName} - Retry attempt ${attempt}/${this.maxRetries}`);
+        }
+        
+        const result = await operation();
+        
+        if (attempt > 1) {
+          console.log(`✅ ${operationName} succeeded on attempt ${attempt}`);
+        }
+        
+        return result;
+        
+      } catch (error) {
+        lastError = error;
+        console.log(`❌ ${operationName} attempt ${attempt} failed:`, error.message);
+        
+        // Don't retry on certain types of errors
+        if (this.isNonRetryableError(error)) {
+          console.log(`🚫 Non-retryable error for ${operationName}, aborting retries`);
+          throw error;
+        }
+        
+        // If this isn't the last attempt, wait before retrying
+        if (attempt < this.maxRetries) {
+          const delay = Math.min(
+            this.baseDelay * Math.pow(2, attempt - 1), 
+            this.maxDelay
+          );
+          console.log(`⏳ Waiting ${delay}ms before retry...`);
+          await this.sleep(delay);
+        }
+      }
+    }
+    
+    console.log(`💥 ${operationName} failed after ${this.maxRetries} attempts`);
+    throw lastError;
+  }
+
+  /**
+   * Check if error should not be retried
+   */
+  isNonRetryableError(error) {
+    // Don't retry on authentication errors, bad requests, etc.
+    if (error.response) {
+      const status = error.response.status;
+      return status === 401 || status === 403 || status === 400 || status === 422;
+    }
+    
+    // Don't retry on certain error messages
+    const nonRetryableMessages = [
+      'invalid api key',
+      'authentication failed',
+      'quota exceeded',
+      'rate limit exceeded'
+    ];
+    
+    const errorMessage = error.message.toLowerCase();
+    return nonRetryableMessages.some(msg => errorMessage.includes(msg));
+  }
+
+  /**
+   * Sleep utility
+   */
+  sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Create axios instance with timeout and retry configuration
+   */
+  createAxiosInstance(timeout = 30000) {
+    return axios.create({
+      timeout,
+      headers: {
+        'Connection': 'keep-alive',
+        'Keep-Alive': 'timeout=5, max=1000'
+      }
+    });
+  }
+
+  /**
    * Analyze drawing using OpenAI Vision API
    */
   async analyzeDrawing(imageBase64) {
     if (!this.openaiApiKey) {
-      // Simulate analysis for development
       return 'A wonderful drawing showing creative elements including characters, objects, and a colorful scene that tells a story.';
     }
 
-    try {
-      const response = await axios.post(
+    return await this.withRetry(async () => {
+      const axiosInstance = this.createAxiosInstance(15000);
+      
+      const response = await axiosInstance.post(
         'https://api.openai.com/v1/chat/completions',
         {
-          model: 'gpt-4-vision-preview',
+          model: 'gpt-4o-mini',
           messages: [
             {
               role: 'user',
@@ -60,10 +158,10 @@ class AIService {
       );
 
       return response.data.choices[0].message.content;
-    } catch (error) {
-      console.error('Drawing analysis failed:', error.response?.data || error.message);
+    }, 'Drawing Analysis').catch(error => {
+      console.error('Drawing analysis failed completely:', error.message);
       return 'A wonderful drawing with creative elements that inspire an amazing story.';
-    }
+    });
   }
 
   /**
@@ -71,11 +169,10 @@ class AIService {
    */
   async transcribeVoice(audioBase64) {
     if (!this.openaiApiKey) {
-      // Simulate transcription for development
       return 'I want to tell a story about adventure and friendship.';
     }
 
-    try {
+    return await this.withRetry(async () => {
       // Create temporary file
       const tempDir = path.join(process.cwd(), 'temp');
       if (!fs.existsSync(tempDir)) {
@@ -86,58 +183,67 @@ class AIService {
       const audioBuffer = Buffer.from(audioBase64, 'base64');
       fs.writeFileSync(tempPath, audioBuffer);
 
-      const FormData = require('form-data');
-      const formData = new FormData();
-      formData.append('file', fs.createReadStream(tempPath));
-      formData.append('model', 'whisper-1');
-      formData.append('language', 'en');
+      try {
+        const FormData = require('form-data');
+        const formData = new FormData();
+        formData.append('file', fs.createReadStream(tempPath));
+        formData.append('model', 'whisper-1');
+        formData.append('language', 'en');
 
-      const response = await axios.post(
-        'https://api.openai.com/v1/audio/transcriptions',
-        formData,
-        {
-          headers: {
-            'Authorization': `Bearer ${this.openaiApiKey}`,
-            ...formData.getHeaders()
+        const axiosInstance = this.createAxiosInstance(20000);
+        
+        const response = await axiosInstance.post(
+          'https://api.openai.com/v1/audio/transcriptions',
+          formData,
+          {
+            headers: {
+              'Authorization': `Bearer ${this.openaiApiKey}`,
+              ...formData.getHeaders()
+            }
           }
+        );
+
+        return response.data.text;
+      } finally {
+        // Always clean up temp file
+        try {
+          fs.unlinkSync(tempPath);
+        } catch (cleanupError) {
+          console.warn('Failed to cleanup temp file:', cleanupError.message);
         }
-      );
-
-      // Clean up temp file
-      fs.unlinkSync(tempPath);
-
-      return response.data.text;
-    } catch (error) {
-      console.error('Voice transcription failed:', error.response?.data || error.message);
+      }
+    }, 'Voice Transcription').catch(error => {
+      console.error('Voice transcription failed completely:', error.message);
       return '';
-    }
+    });
   }
 
   /**
-   * Generate story content using OpenAI GPT-4
+   * Generate story content using OpenAI GPT-4 (6-line format for reliable narration)
    */
   async generateStory(storyPrompt) {
     if (!this.openaiApiKey) {
-      // Return simulated story for development
       return this.generateSimulatedStory(storyPrompt);
     }
 
-    try {
-      const response = await axios.post(
+    return await this.withRetry(async () => {
+      const axiosInstance = this.createAxiosInstance(30000);
+      
+      const response = await axiosInstance.post(
         'https://api.openai.com/v1/chat/completions',
         {
-          model: 'gpt-4-turbo-preview',
+          model: 'gpt-4o-mini',
           messages: [
             {
               role: 'system',
-              content: 'You are a creative children\'s story writer who creates magical, educational, and age-appropriate stories that inspire young minds. Always ensure stories are positive, safe, and engaging for children ages 3-12.'
+              content: 'You are a creative children\'s story writer who creates magical, educational, and age-appropriate stories for children ages 3-12. Create stories that are EXACTLY 6 lines long - no more, no less. Each line should be a complete sentence that flows naturally to the next. Keep the total word count under 100 words for optimal narration.'
             },
             {
               role: 'user',
-              content: storyPrompt
+              content: storyPrompt + '\n\nIMPORTANT: Write exactly 6 lines, each line being one sentence. Make it concise but magical!'
             }
           ],
-          max_tokens: 800,
+          max_tokens: 200,
           temperature: 0.8
         },
         {
@@ -149,10 +255,7 @@ class AIService {
       );
 
       return response.data.choices[0].message.content;
-    } catch (error) {
-      console.error('Story generation failed:', error.response?.data || error.message);
-      throw new Error('Failed to generate story content');
-    }
+    }, 'Story Generation');
   }
 
   /**
@@ -163,11 +266,13 @@ class AIService {
       return `A Magical ${storyType.name} Adventure`;
     }
 
-    try {
-      const response = await axios.post(
+    return await this.withRetry(async () => {
+      const axiosInstance = this.createAxiosInstance(10000);
+      
+      const response = await axiosInstance.post(
         'https://api.openai.com/v1/chat/completions',
         {
-          model: 'gpt-4',
+          model: 'gpt-4o-mini',
           messages: [
             {
               role: 'user',
@@ -186,60 +291,107 @@ class AIService {
       );
 
       return response.data.choices[0].message.content.replace(/"/g, '');
-    } catch (error) {
-      console.error('Title generation failed:', error.response?.data || error.message);
+    }, 'Title Generation').catch(error => {
+      console.error('Title generation failed completely:', error.message);
       return `A Magical ${storyType.name} Adventure`;
-    }
+    });
   }
 
   /**
-   * Generate audio narration using ElevenLabs
+   * Generate audio narration using ElevenLabs (optimized for short stories)
    */
   async generateNarration(text, voiceSettings = {}) {
     if (!this.elevenLabsApiKey) {
       // Return simulated audio data for development
       return {
         audioBuffer: Buffer.from('simulated-audio-data'),
-        duration: Math.ceil(text.split(' ').length * 0.5), // ~0.5 seconds per word
+        duration: Math.ceil(text.split(' ').length * 0.5),
         voiceId: this.defaultVoiceId
       };
     }
 
-    try {
-      const response = await axios.post(
+    // With 6-line stories under 100 words, we shouldn't need chunking
+    console.log(`🔊 Generating narration for ${text.length} characters (${text.split(' ').length} words)`);
+
+    return await this.withRetry(async () => {
+      const axiosInstance = this.createAxiosInstance(30000);
+      
+      const requestData = {
+        text: text.trim(),
+        model_id: 'eleven_multilingual_v2',
+        voice_settings: {
+          stability: 0.5,
+          similarity_boost: 0.8,
+          style: 0.2,
+          use_speaker_boost: true,
+          ...voiceSettings
+        }
+      };
+
+      const response = await axiosInstance.post(
         `https://api.elevenlabs.io/v1/text-to-speech/${this.defaultVoiceId}`,
-        {
-          text,
-          model_id: 'eleven_multilingual_v2',
-          voice_settings: {
-            stability: 0.5,
-            similarity_boost: 0.8,
-            style: 0.2,
-            use_speaker_boost: true,
-            ...voiceSettings
-          }
-        },
+        requestData,
         {
           headers: {
             'Accept': 'audio/mpeg',
             'Content-Type': 'application/json',
-            'xi-api-key': this.elevenLabsApiKey
+            'xi-api-key': this.elevenLabsApiKey,
+            'User-Agent': 'StoryGenerator/1.0'
           },
-          responseType: 'arraybuffer'
+          responseType: 'arraybuffer',
+          timeout: 30000,
+          maxRedirects: 5,
+          validateStatus: function (status) {
+            return status >= 200 && status < 300;
+          }
         }
       );
 
+      if (!response.data || response.data.byteLength === 0) {
+        throw new Error('Received empty audio response from ElevenLabs');
+      }
+
       const audioBuffer = Buffer.from(response.data);
-      const duration = Math.ceil(text.split(' ').length * 0.5); // Approximate duration
+      const duration = Math.ceil(text.split(' ').length * 0.5);
+
+      console.log(`✅ Generated ${audioBuffer.length} bytes of audio (estimated ${duration}s duration)`);
 
       return {
         audioBuffer,
         duration,
         voiceId: this.defaultVoiceId
       };
+    }, 'Audio Narration');
+  }
+
+  /**
+   * Generate audio narration and save to Firebase Storage
+   */
+  async generateNarrationWithStorage(text, storyId, voiceSettings = {}) {
+    try {
+      console.log(`🎵 Generating and uploading narration for story ${storyId}`);
+      
+      // Generate the audio
+      const narrationResult = await this.generateNarration(text, voiceSettings);
+      
+      // Upload to Firebase Storage
+      const firebaseResult = await this.firebaseStorage.uploadAudio(
+        narrationResult.audioBuffer,
+        storyId,
+        narrationResult.voiceId
+      );
+      
+      console.log(`✅ Narration uploaded to Firebase: ${firebaseResult.publicUrl}`);
+      
+      return {
+        ...narrationResult,
+        firebase: firebaseResult,
+        audioUrl: firebaseResult.publicUrl,
+        downloadUrl: firebaseResult.downloadUrl
+      };
     } catch (error) {
-      console.error('Narration generation failed:', error.response?.data || error.message);
-      throw new Error('Failed to generate audio narration');
+      console.error('Narration generation with Firebase failed:', error);
+      throw error;
     }
   }
 
@@ -248,21 +400,24 @@ class AIService {
    */
   async generateIllustrations(storyContent, storyType, numImages = 2) {
     if (!this.openaiApiKey) {
-      // Return simulated image data for development
       return [{
         imageBuffer: Buffer.from('simulated-image-data'),
         description: 'A beautiful illustration for the story'
       }];
     }
 
-    try {
-      const scenes = this.extractKeyScenes(storyContent, numImages);
-      const illustrations = [];
+    const scenes = this.extractKeyScenes(storyContent, numImages);
+    const illustrations = [];
 
-      for (const scene of scenes) {
+    for (let i = 0; i < scenes.length; i++) {
+      const scene = scenes[i];
+      
+      await this.withRetry(async () => {
         const prompt = `Children's book illustration of: ${scene}. Style: ${storyType.name}, colorful, friendly, hand-drawn aesthetic, suitable for children ages 3-12. No text or words in the image.`;
 
-        const response = await axios.post(
+        const axiosInstance = this.createAxiosInstance(60000);
+
+        const response = await axiosInstance.post(
           'https://api.openai.com/v1/images/generations',
           {
             model: 'dall-e-3',
@@ -281,30 +436,150 @@ class AIService {
         );
 
         if (response.data.data[0]?.url) {
-          // Download the image
-          const imageResponse = await axios.get(response.data.data[0].url, {
-            responseType: 'arraybuffer'
+          const imageResponse = await axiosInstance.get(response.data.data[0].url, {
+            responseType: 'arraybuffer',
+            timeout: 30000
           });
 
           illustrations.push({
             imageBuffer: Buffer.from(imageResponse.data),
-            description: scene
+            description: scene,
+            index: i
           });
         }
-      }
+      }, `Illustration Generation (${scene.substring(0, 50)}...)`).catch(error => {
+        console.error(`Failed to generate illustration for scene: ${scene}`, error.message);
+        illustrations.push({
+          imageBuffer: Buffer.from('simulated-image-data'),
+          description: scene,
+          index: i
+        });
+      });
+    }
 
-      return illustrations;
+    return illustrations;
+  }
+
+  /**
+   * Generate illustrations and save to Firebase Storage
+   */
+  async generateIllustrationsWithStorage(storyContent, storyType, storyId, numImages = 2) {
+    try {
+      console.log(`🖼️  Generating and uploading ${numImages} illustrations for story ${storyId}`);
+      
+      // Generate the illustrations
+      const illustrations = await this.generateIllustrations(storyContent, storyType, numImages);
+      
+      // Upload each illustration to Firebase
+      const firebaseResults = [];
+      for (let i = 0; i < illustrations.length; i++) {
+        const illustration = illustrations[i];
+        
+        console.log(`📤 Uploading illustration ${i + 1}/${illustrations.length}`);
+        
+        const firebaseResult = await this.firebaseStorage.uploadImage(
+          illustration.imageBuffer,
+          storyId,
+          illustration.description,
+          i
+        );
+        
+        firebaseResults.push({
+          ...illustration,
+          firebase: firebaseResult,
+          imageUrl: firebaseResult.publicUrl,
+          downloadUrl: firebaseResult.downloadUrl
+        });
+      }
+      
+      console.log(`✅ All ${firebaseResults.length} illustrations uploaded to Firebase`);
+      
+      return firebaseResults;
     } catch (error) {
-      console.error('Illustration generation failed:', error.response?.data || error.message);
-      return [{
-        imageBuffer: Buffer.from('simulated-image-data'),
-        description: 'A beautiful illustration for the story'
-      }];
+      console.error('Illustration generation with Firebase failed:', error);
+      throw error;
     }
   }
 
   /**
-   * Build comprehensive story prompt
+   * Generate complete story with all assets saved to Firebase
+   */
+  async generateCompleteStoryWithFirebase(input, storyId) {
+    try {
+      console.log(`🎨 Generating complete story with Firebase storage for ${storyId}`);
+      
+      // Build story prompt
+      const storyPrompt = this.buildStoryPrompt(input);
+      
+      // Generate story content
+      console.log('📝 Generating story content...');
+      const storyContent = await this.generateStory(storyPrompt);
+      
+      // Generate title
+      console.log('🏷️  Generating story title...');
+      const title = await this.generateTitle(storyContent, input.storyType);
+      
+      // Generate and upload narration
+      console.log('🔊 Generating and uploading narration...');
+      const narrationResult = await this.generateNarrationWithStorage(
+        storyContent,
+        storyId,
+        input.preferences?.voiceSettings
+      );
+      
+      // Generate and upload illustrations (if requested)
+      let illustrationsResult = [];
+      if (input.preferences?.generateIllustrations) {
+        console.log('🎨 Generating and uploading illustrations...');
+        illustrationsResult = await this.generateIllustrationsWithStorage(
+          storyContent,
+          input.storyType,
+          storyId,
+          2
+        );
+      }
+      
+      const result = {
+        storyId,
+        title,
+        content: storyContent,
+        narration: {
+          audioUrl: narrationResult.audioUrl,
+          downloadUrl: narrationResult.downloadUrl,
+          duration: narrationResult.duration,
+          voiceId: narrationResult.voiceId,
+          firebase: narrationResult.firebase
+        },
+        illustrations: illustrationsResult.map(ill => ({
+          imageUrl: ill.imageUrl,
+          downloadUrl: ill.downloadUrl,
+          description: ill.description,
+          firebase: ill.firebase
+        })),
+        metadata: {
+          createdAt: new Date().toISOString(),
+          storyType: input.storyType.name,
+          language: input.language,
+          length: input.length,
+          characterNames: input.characterNames,
+          hasAudio: true,
+          hasIllustrations: illustrationsResult.length > 0
+        }
+      };
+      
+      console.log(`✨ Complete story generated and uploaded for ${storyId}`);
+      console.log(`🎵 Audio: ${result.narration.audioUrl}`);
+      console.log(`🖼️  Images: ${result.illustrations.length} uploaded`);
+      
+      return result;
+    } catch (error) {
+      console.error(`Failed to generate complete story for ${storyId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Build comprehensive story prompt (optimized for 6-line stories)
    */
   buildStoryPrompt(input) {
     const {
@@ -318,7 +593,7 @@ class AIService {
       language
     } = input;
 
-    let prompt = `Create a ${length} children's story in the ${storyType.name} genre. `;
+    let prompt = `Create a short, magical children's story in the ${storyType.name} genre. `;
 
     if (drawingAnalysis) {
       prompt += `Base the story on this child's drawing: ${drawingAnalysis}. `;
@@ -328,30 +603,32 @@ class AIService {
       prompt += `Incorporate these ideas the child shared: "${voiceTranscription}". `;
     }
 
-    if (characterNames.length > 0) {
+    if (characterNames && characterNames.length > 0) {
       prompt += `Include these character names: ${characterNames.join(', ')}. `;
     }
 
-    Object.entries(characterDescriptions).forEach(([name, description]) => {
-      prompt += `${name} is ${description}. `;
-    });
+    if (characterDescriptions) {
+      Object.entries(characterDescriptions).forEach(([name, description]) => {
+        prompt += `${name} is ${description}. `;
+      });
+    }
 
     if (userPrompt) {
-      prompt += `Additional user request: ${userPrompt}. `;
+      prompt += `Story request: ${userPrompt}. `;
     }
 
     prompt += `
 Story requirements:
+- EXACTLY 6 lines (6 sentences total)
 - Age-appropriate for children 3-12 years old
 - Positive, educational, and inspiring
-- Include the characteristics: ${storyType.characteristics.join(', ')}
-- Word count: ${this.getWordCountForLength(length)} words
+- Under 100 words total
 - Language: ${language}
 - Clear beginning, middle, and end
-- Engaging dialogue and descriptions
-- Moral lesson or positive message
+- Include a simple moral or positive message
+- Make it magical and memorable!
 
-Make it magical, fun, and memorable!`;
+Format: Write exactly 6 lines, each line being one complete sentence.`;
 
     return prompt;
   }
@@ -360,53 +637,40 @@ Make it magical, fun, and memorable!`;
    * Extract key scenes from story content
    */
   extractKeyScenes(content, numScenes = 2) {
-    const paragraphs = content.split('\n\n').filter(p => p.trim().length > 50);
-    const scenes = [];
-
-    // Take evenly distributed paragraphs as scenes
-    const step = Math.max(1, Math.floor(paragraphs.length / numScenes));
+    // Split by line breaks for 6-line stories
+    const lines = content.split('\n').filter(line => line.trim().length > 20);
     
-    for (let i = 0; i < Math.min(paragraphs.length, numScenes); i += step) {
-      if (paragraphs[i]) {
-        // Extract first sentence as scene description
-        const firstSentence = paragraphs[i].split('.')[0];
-        scenes.push(firstSentence.trim());
+    if (lines.length === 0) {
+      return ['A magical adventure scene'];
+    }
+
+    const scenes = [];
+    
+    // For 6-line stories, take scenes from beginning and middle/end
+    if (lines.length >= 2) {
+      scenes.push(lines[0].trim()); // Beginning scene
+      
+      if (numScenes > 1) {
+        const middleIndex = Math.floor(lines.length / 2);
+        scenes.push(lines[middleIndex].trim()); // Middle scene
       }
+    } else {
+      scenes.push(lines[0].trim());
     }
 
     return scenes.length > 0 ? scenes : ['A magical adventure scene'];
   }
 
   /**
-   * Get word count target for story length
-   */
-  getWordCountForLength(length) {
-    const wordCounts = {
-      short: 150,
-      medium: 300,
-      long: 500,
-      epic: 800
-    };
-    return wordCounts[length] || 300;
-  }
-
-  /**
-   * Generate simulated story for development
+   * Generate simulated story for development (6-line format)
    */
   generateSimulatedStory(storyPrompt) {
-    return `Once upon a time, in a magical land far away, there lived a brave little character who loved adventures.
-
-Every day, they would explore the enchanted forest near their home, meeting friendly animals and discovering wonderful secrets. The forest was filled with sparkling streams, colorful flowers, and trees that seemed to whisper ancient stories.
-
-One sunny morning, something extraordinary happened. They found a mysterious map hidden beneath a rainbow-colored mushroom. The map showed the way to a treasure that could bring happiness to their entire village.
-
-With courage in their heart and their loyal friends by their side, they began an amazing journey. Along the way, they learned important lessons about friendship, kindness, and believing in themselves.
-
-After facing challenges and helping others, they discovered that the real treasure wasn't gold or jewels, but the joy of sharing adventures with friends and the confidence they found within themselves.
-
-And they all lived happily ever after, knowing that every day could bring a new magical adventure.
-
-The End.`;
+    return `Once upon a time, Squeaky the brave little mouse heard about magical cheese hidden deep in the enchanted forest.
+With his new friend Whiskers the wise cat, they set off on an exciting adventure together.
+They crossed sparkling streams and climbed over colorful mushrooms, helping other forest animals along the way.
+When they finally found the glowing magical cheese, it granted them the power to understand all forest languages.
+Squeaky and Whiskers realized the real magic was the friendship they had built during their journey.
+They returned home as heroes, sharing their magical gift with everyone in the village.`;
   }
 
   /**

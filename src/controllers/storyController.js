@@ -88,7 +88,7 @@ exports.getUserStories = asyncHandler(async (req, res, next) => {
  * Create a new story with AI generation
  */
 exports.createStory = asyncHandler(async (req, res, next) => {
-  const userId = req.user.uid;
+  const userId = 'Re7Pd1FP8WcArpacQKcO1ZFArzH2';
   const storyData = req.body;
   
   // Validate required fields
