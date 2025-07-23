@@ -7,54 +7,80 @@ const protect = asyncHandler(async (req, res, next) => {
   let token;
   let user = null;
   
-  console.log('Auth middleware - Checking authentication...');
+  console.log('\n=== Auth Middleware ===');
   console.log('Session ID:', req.sessionID);
-  console.log('Session user:', req.session.user);
+  console.log('Existing Session:', req.session.user || 'None');
   
-  // Check for token in Authorization header
-  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+  // 1. Check for token in both header and cookies
+  if (req.headers.authorization?.startsWith('Bearer')) {
     token = req.headers.authorization.split(' ')[1];
-    console.log('Token found in header');
-  } else if (req.cookies && req.cookies.token) {
+    console.log('JWT found in Authorization header');
+  } else if (req.cookies?.token) {
     token = req.cookies.token;
-    console.log('Token found in cookie');
+    console.log('JWT found in cookie');
   }
-  
-  // Try session-based authentication first
-  if (req.session && req.session.user && req.session.user.isAuthenticated) {
-    console.log('Using session authentication');
-    user = req.session.user;
-    
-    // Verify user still exists in Firebase
+
+  // 2. Session-based authentication (primary)
+  if (req.session?.user?.isAuthenticated) {
+    console.log('\n[Session Auth Flow]');
     try {
-      const userRecord = await getAuth().getUser(user.uid);
-      user.emailVerified = userRecord.emailVerified;
-      console.log('Session user verified in Firebase');
+      const userRecord = await getAuth().getUser(req.session.user.uid);
+      user = {
+        ...req.session.user,
+        emailVerified: userRecord.emailVerified
+      };
+      console.log('Session validated with Firebase');
     } catch (error) {
-      console.log('Session user not found in Firebase:', error.message);
-      // Destroy invalid session
-      req.session.destroy();
-      throw new AppError('Session invalid - user not found', 401);
+      console.error('Session validation failed:', error.message);
+      await new Promise(resolve => req.session.destroy(resolve));
+      throw new AppError('Session expired - please login again', 401);
     }
-  }
-  // Fallback to JWT authentication
+  } 
+  // 3. JWT fallback authentication
   else if (token) {
-    console.log('Using JWT authentication');
+    console.log('\n[JWT Auth Flow]');
     try {
-      // Verify JWT token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      console.log('JWT decoded:', { uid: decoded.uid, email: decoded.email, role: decoded.role });
-      
-      // Verify user still exists in Firebase
+      console.log('JWT decoded:', {
+        uid: decoded.uid,
+        email: decoded.email,
+        sessionMatch: decoded.sessionId ? 
+          (decoded.sessionId === req.sessionID ? '✅' : '❌') : 'N/A'
+      });
+
       const userRecord = await getAuth().getUser(decoded.uid);
-      console.log('JWT user verified in Firebase');
       
+      // 3a. Create session if JWT is valid but session is missing
+      if (!req.session.user) {
+        req.session.user = {
+          uid: decoded.uid,
+          email: decoded.email,
+          role: decoded.role,
+          isAuthenticated: true,
+          loginTime: new Date().toISOString()
+        };
+        await new Promise(resolve => req.session.save(resolve));
+        console.log('New session created from JWT');
+      }
+      
+      // 3b. Verify session consistency
+      if (decoded.sessionId && decoded.sessionId !== req.sessionID) {
+        console.warn('Session ID mismatch - Regenerating session');
+        await new Promise(resolve => req.session.regenerate(resolve));
+        req.session.user = {
+          ...decoded,
+          isAuthenticated: true
+        };
+        await new Promise(resolve => req.session.save(resolve));
+      }
+
       user = {
         uid: decoded.uid,
         email: decoded.email,
         role: decoded.role,
         emailVerified: userRecord.emailVerified
       };
+<<<<<<< Updated upstream
       
       // supporting both session-based auth and JWT
       // if (decoded.sessionId) {
@@ -71,61 +97,80 @@ const protect = asyncHandler(async (req, res, next) => {
       // }
 
       
+=======
+>>>>>>> Stashed changes
     } catch (error) {
-      console.log('JWT authentication error:', error.message);
-      if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
-        throw new AppError('Not authorized to access this route', 401);
+      console.error('JWT validation failed:', error.message);
+      if (error.name === 'TokenExpiredError') {
+        throw new AppError('Your session has expired', 401);
       }
-      throw error;
+      throw new AppError('Invalid authentication token', 401);
     }
   }
-  
-  // No valid authentication found
+
+  // 4. Final verification
   if (!user) {
-    console.log('No valid authentication found');
-    throw new AppError('Not authorized to access this route', 401);
+    console.log('\n[Result] No valid authentication');
+    throw new AppError('Not authorized - please login', 401);
   }
-  
-  // Add user to request
+
+  // 5. Attach user to request
   req.user = user;
-  
-  console.log('User authenticated successfully:', user.email);
-  console.log('Authentication method:', req.session.user ? 'Session' : 'JWT');
-  
+  console.log('\n[Result] Authenticated as:', {
+    uid: user.uid,
+    email: user.email,
+    via: req.session.user ? 'Session' : 'JWT'
+  });
+
   next();
 });
 
+// Enhanced authorize middleware with permission logging
 const authorize = (...roles) => {
   return (req, res, next) => {
-    if (!req.user || !req.user.role) {
+    console.log('\n[Authorization Check] Required roles:', roles);
+    console.log('User role:', req.user?.role || 'None');
+    
+    if (!req.user?.role) {
       throw new AppError('User role not found', 403);
     }
     
     if (!roles.includes(req.user.role)) {
-      throw new AppError('User not authorized for this action', 403);
+      console.warn('Access denied - insufficient permissions');
+      throw new AppError(`Requires ${roles.join(' or ')} role`, 403);
     }
     
+    console.log('Authorization granted');
     next();
   };
 };
 
-// Optional auth middleware - for routes that work with or without auth
+// Optional auth with detailed logging
 const optionalAuth = asyncHandler(async (req, res, next) => {
   try {
     await protect(req, res, () => {});
+    console.log('Optional auth - User authenticated');
   } catch (error) {
-    // Continue without authentication
+    console.log('Optional auth - Continuing unauthenticated');
     req.user = null;
   }
   next();
 });
 
-// Check if user has active session
-const requireSession = (req, res, next) => {
-  if (!req.session || !req.session.user || !req.session.user.isAuthenticated) {
+// Strict session requirement
+const requireSession = asyncHandler(async (req, res, next) => {
+  if (!req.session?.user?.isAuthenticated) {
+    console.warn('Session required but not found');
     throw new AppError('Active session required', 401);
   }
+  
+  console.log('Session verified:', req.session.user.uid);
   next();
-};
+});
 
-module.exports = { protect, authorize, optionalAuth, requireSession };
+module.exports = { 
+  protect, 
+  authorize, 
+  optionalAuth, 
+  requireSession 
+};

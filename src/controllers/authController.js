@@ -123,12 +123,17 @@ exports.login = asyncHandler(async (req, res, next) => {
     process.env.JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRE }
   );
-
-  await userDoc.ref.update({ lastLogin: new Date().toISOString() });
-  logger.info(`User logged in: ${email}, session: ${req.sessionID}`);
-
-  res.cookie('token', token, {
-    expires: new Date(Date.now() + process.env.JWT_COOKIE_EXPIRE * 86400000),
+  
+  // Update last login
+  await userDoc.ref.update({
+    lastLogin: new Date().toISOString()
+  });
+  
+  // Set cookie
+  const cookieOptions = {
+    expires: new Date(
+      Date.now() + process.env.JWT_COOKIE_EXPIRE * 24 * 60 * 60 * 1000
+    ),
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict'
