@@ -80,25 +80,7 @@ const protect = asyncHandler(async (req, res, next) => {
         role: decoded.role,
         emailVerified: userRecord.emailVerified
       };
-<<<<<<< Updated upstream
-      
-      // supporting both session-based auth and JWT
-      // if (decoded.sessionId) {
-      //   if (req.session && req.sessionID) {
-      //     if (req.sessionID !== decoded.sessionId) {
-      //       console.log('JWT session mismatch with req.sessionID');
-      //       throw new AppError('Token session mismatch', 401);
-      //     }
-      //   } else {
-      //     console.log('JWT contains sessionId, but no session present on request');
-      //     // Decide: do you want to allow this, or require active session?
-      //     // For now, let’s allow it
-      //   }
-      // }
 
-      
-=======
->>>>>>> Stashed changes
     } catch (error) {
       console.error('JWT validation failed:', error.message);
       if (error.name === 'TokenExpiredError') {

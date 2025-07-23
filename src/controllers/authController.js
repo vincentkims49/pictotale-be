@@ -137,7 +137,7 @@ exports.login = asyncHandler(async (req, res, next) => {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict'
-  });
+  };
 
   res.status(200).json({
     success: true,
