@@ -286,7 +286,7 @@ exports.resendVerification = asyncHandler(async (req, res, next) => {
     logger.warn('Redis not available for email verification token:', err.message)
   );
 
-  const verifyUrl = `${process.env.FRONTEND_URL}/verify-email/${verifyToken}`;
+  const verifyUrl = `${process.env.FRONTEND_URL}/api/auth/verify-email/${verifyToken}`;
   await sendEmail({
     email,
     subject: 'Email Verification',

@@ -1,9 +1,13 @@
 // src/repositories/storyRepository.js
 const { getFirestore } = require('../config/firebase');
+const admin = require('firebase-admin');
 
 class StoryRepository {
   constructor() {
     this._db = null;
+    this._storage = null;
+    this._bucket = null;
+    this.bucketName = 'pictotale-backend.firebasestorage.app';
   }
 
   // Lazy initialization of Firestore
@@ -12,6 +16,22 @@ class StoryRepository {
       this._db = getFirestore();
     }
     return this._db;
+  }
+
+  // Lazy initialization of Firebase Storage
+  get storage() {
+    if (!this._storage) {
+      this._storage = admin.storage();
+    }
+    return this._storage;
+  }
+
+  // Get storage bucket
+  get bucket() {
+    if (!this._bucket) {
+      this._bucket = this.storage.bucket(this.bucketName);
+    }
+    return this._bucket;
   }
 
   /**
@@ -277,43 +297,189 @@ class StoryRepository {
   }
 
   /**
-   * Save drawing image (placeholder implementation)
+   * Upload file to Firebase Storage
+   */
+  async uploadFile(filePath, buffer, contentType, metadata = {}) {
+    try {
+      console.log(`📤 Uploading file to Firebase Storage: ${filePath}`);
+      console.log(`📦 File size: ${buffer.length} bytes`);
+      console.log(`🏷️  Content type: ${contentType}`);
+      
+      const file = this.bucket.file(filePath);
+      
+      // Upload the file
+      await file.save(buffer, {
+        metadata: {
+          contentType,
+          metadata: {
+            uploadedAt: new Date().toISOString(),
+            ...metadata
+          }
+        }
+      });
+      
+      console.log(`✅ File uploaded successfully: ${filePath}`);
+      
+      // Generate signed URL for secure access
+      const [signedUrl] = await file.getSignedUrl({
+        action: 'read',
+        expires: Date.now() + 1000 * 60 * 60 * 24 * 365 // 1 year
+      });
+      
+      console.log(`🔗 Signed URL generated for: ${filePath}`);
+      
+      return signedUrl;
+      
+    } catch (error) {
+      console.error(`❌ Error uploading file ${filePath}:`, error);
+      throw new Error(`Failed to upload file: ${error.message}`);
+    }
+  }
+
+  /**
+   * Save drawing image to Firebase Storage
    */
   async saveDrawing(userId, storyId, imageBase64) {
-    // In a real implementation, you would upload to Firebase Storage
-    // For now, return a placeholder URL
-    return `https://storage.googleapis.com/your-bucket/drawings/${userId}/${storyId}/drawing.jpg`;
+    try {
+      console.log('💾 Saving drawing to Firebase Storage...');
+      
+      // Convert base64 to buffer
+      const imageBuffer = Buffer.from(imageBase64, 'base64');
+      const filePath = `drawings/${userId}/${storyId}/drawing_${Date.now()}.jpg`;
+      
+      const downloadUrl = await this.uploadFile(
+        filePath,
+        imageBuffer,
+        'image/jpeg',
+        {
+          type: 'drawing',
+          userId,
+          storyId
+        }
+      );
+      
+      console.log('✅ Drawing saved successfully');
+      return downloadUrl;
+      
+    } catch (error) {
+      console.error('❌ Error saving drawing:', error);
+      throw error;
+    }
   }
 
   /**
-   * Save voice input (placeholder implementation)
+   * Save voice input to Firebase Storage
    */
   async saveVoiceInput(userId, storyId, audioBase64) {
-    // In a real implementation, you would upload to Firebase Storage
-    // For now, return a placeholder URL
-    return `https://storage.googleapis.com/your-bucket/voice/${userId}/${storyId}/voice.mp3`;
+    try {
+      console.log('🎤 Saving voice input to Firebase Storage...');
+      
+      // Convert base64 to buffer
+      const audioBuffer = Buffer.from(audioBase64, 'base64');
+      const filePath = `voice/${userId}/${storyId}/voice_${Date.now()}.wav`;
+      
+      const downloadUrl = await this.uploadFile(
+        filePath,
+        audioBuffer,
+        'audio/wav',
+        {
+          type: 'voice_input',
+          userId,
+          storyId
+        }
+      );
+      
+      console.log('✅ Voice input saved successfully');
+      return downloadUrl;
+      
+    } catch (error) {
+      console.error('❌ Error saving voice input:', error);
+      throw error;
+    }
   }
 
   /**
-   * Save generated audio (placeholder implementation)
+   * Save generated audio narration to Firebase Storage
    */
   async saveGeneratedAudio(storyId, audioBuffer) {
-    // In a real implementation, you would upload to Firebase Storage
-    // For now, return a placeholder URL
-    return `https://storage.googleapis.com/your-bucket/audio/${storyId}/narration.mp3`;
+    try {
+      console.log('🔊 Saving generated audio to Firebase Storage...');
+      console.log(`📦 Audio buffer size: ${audioBuffer?.length || 0} bytes`);
+      
+      if (!audioBuffer || audioBuffer.length === 0) {
+        throw new Error('Invalid audio buffer provided');
+      }
+      
+      const timestamp = Date.now();
+      const filePath = `stories/${storyId}/narration_${timestamp}.mp3`;
+      
+      console.log(`📁 Target path: ${filePath}`);
+      
+      const downloadUrl = await this.uploadFile(
+        filePath,
+        audioBuffer,
+        'audio/mpeg',
+        {
+          type: 'narration',
+          storyId,
+          generatedAt: new Date().toISOString()
+        }
+      );
+      
+      console.log('✅ Generated audio saved successfully');
+      console.log(`🔗 Download URL: ${downloadUrl}`);
+      
+      return downloadUrl;
+      
+    } catch (error) {
+      console.error('❌ Error saving generated audio:', error);
+      
+      // Provide specific error guidance
+      if (error.code === 'storage/unauthorized') {
+        console.log('💡 Fix: Check Firebase Storage rules or service account permissions');
+      } else if (error.message.includes('bucket')) {
+        console.log('💡 Fix: Verify bucket name is "pictotale-backend.firebasestorage.app"');
+      }
+      
+      throw new Error(`Failed to save audio to storage: ${error.message}`);
+    }
   }
 
   /**
-   * Save illustration (placeholder implementation)
+   * Save illustration to Firebase Storage
    */
   async saveIllustration(storyId, imageBuffer, index) {
-    // In a real implementation, you would upload to Firebase Storage
-    // For now, return a placeholder URL
-    return `https://storage.googleapis.com/your-bucket/illustrations/${storyId}/image_${index}.jpg`;
+    try {
+      console.log(`🎨 Saving illustration ${index} to Firebase Storage...`);
+      
+      if (!imageBuffer || imageBuffer.length === 0) {
+        throw new Error('Invalid image buffer provided');
+      }
+      
+      const filePath = `illustrations/${storyId}/image_${index}_${Date.now()}.jpg`;
+      
+      const downloadUrl = await this.uploadFile(
+        filePath,
+        imageBuffer,
+        'image/jpeg',
+        {
+          type: 'illustration',
+          storyId,
+          index: index.toString()
+        }
+      );
+      
+      console.log(`✅ Illustration ${index} saved successfully`);
+      return downloadUrl;
+      
+    } catch (error) {
+      console.error(`❌ Error saving illustration ${index}:`, error);
+      throw error;
+    }
   }
 
   /**
-   * Update user progress (placeholder implementation)
+   * Update user progress
    */
   async updateUserProgress(userId, progressData) {
     try {
@@ -328,6 +494,52 @@ class StoryRepository {
     } catch (error) {
       console.error('Error updating user progress:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Test Firebase Storage connection
+   */
+  async testStorageConnection() {
+    try {
+      console.log('🧪 Testing Firebase Storage connection...');
+      console.log(`📦 Bucket name: ${this.bucketName}`);
+      
+      // Check if bucket exists
+      const [exists] = await this.bucket.exists();
+      console.log(`📦 Bucket exists: ${exists}`);
+      
+      if (!exists) {
+        throw new Error(`Bucket ${this.bucketName} does not exist`);
+      }
+      
+      // Test upload with a small file
+      const testData = Buffer.from('Firebase Storage test from pictotale-backend');
+      const testPath = `test/connection-test-${Date.now()}.txt`;
+      
+      const testUrl = await this.uploadFile(testPath, testData, 'text/plain', {
+        test: 'true'
+      });
+      
+      console.log('✅ Firebase Storage connection test successful');
+      console.log(`🔗 Test file URL: ${testUrl}`);
+      
+      // Clean up test file
+      await this.bucket.file(testPath).delete();
+      console.log('🗑️ Test file cleaned up');
+      
+      return {
+        success: true,
+        bucketName: this.bucketName,
+        testUrl
+      };
+      
+    } catch (error) {
+      console.error('❌ Firebase Storage connection test failed:', error);
+      return {
+        success: false,
+        error: error.message
+      };
     }
   }
 
@@ -366,12 +578,17 @@ class StoryRepository {
         });
       }
       
+      // Test Firebase Storage
+      const storageTest = await this.testStorageConnection();
+      console.log('Firebase Storage test result:', storageTest);
+      
       console.log('=== End Debug Info ===');
       
       return {
         collections: collections.map(col => col.id),
         hasStoryTypes: !storyTypesSnapshot.empty,
-        hasChallenges: !challengesSnapshot.empty
+        hasChallenges: !challengesSnapshot.empty,
+        storageWorking: storageTest.success
       };
     } catch (error) {
       console.error('Error debugging database:', error);
@@ -379,6 +596,5 @@ class StoryRepository {
     }
   }
 }
-
 
 module.exports = new StoryRepository();
