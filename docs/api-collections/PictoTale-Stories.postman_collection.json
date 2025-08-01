@@ -1,0 +1,367 @@
+{
+  "info": {
+    "name": "PictoTale Stories API",
+    "description": "Story management endpoints for PictoTale - AI-powered story creation and management",
+    "version": "1.0.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3001",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOiJ6Y0NaTGlZOWQzWjdRSGRuZW9sOVJtZTZJalMyIiwiZW1haWwiOiJtdW5kdXV1c0BnbWFpbC5jb20iLCJyb2xlIjoidXNlciIsInNlc3Npb25JZCI6Inh6R0tZVEp6dXB3QXVnbGl4VkRhY0NTdlIxd3pGTjJLIiwiaWF0IjoxNzU0MDgzNjY2LCJleHAiOjE3NTQ2ODg0NjZ9.UEKyG5lBfWy6a6cruNJFfj4wv79tC8c-DdC-qhmQJyM",
+      "type": "string"
+    },
+    {
+      "key": "storyId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Story Discovery",
+      "item": [
+        {
+          "name": "Get All Story Types",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/stories/types",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "stories", "types"]
+            },
+            "description": "Get all 2590+ story types for ages 2-15"
+          }
+        },
+        {
+          "name": "Get Daily Challenges",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/stories/challenges/daily",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "stories", "challenges", "daily"]
+            },
+            "description": "Get daily story challenges"
+          }
+        },
+        {
+          "name": "Get Featured Stories",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/stories/featured",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "stories", "featured"]
+            },
+            "description": "Get featured stories from the community"
+          }
+        },
+        {
+          "name": "Debug Database",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/stories/debug",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "stories", "debug"]
+            },
+            "description": "Get database debug information"
+          }
+        }
+      ]
+    },
+    {
+      "name": "User Stories",
+      "item": [
+        {
+          "name": "Get User Stories",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/stories/user?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "stories", "user"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Get current user's stories with pagination"
+          }
+        },
+        {
+          "name": "Get User Stories (Alias)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/stories/my-stories",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "stories", "my-stories"]
+            },
+            "description": "Alternative endpoint for user stories"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Story Creation",
+      "item": [
+        {
+          "name": "Create Story with Text Prompt",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"storyTypeId\": \"adventure_forest_children_2_0\",\n  \"userPrompt\": \"A happy little explorer finds a magical forest with friendly animals\",\n  \"characterNames\": [\"Explorer Sam\"],\n  \"isShared\": false,\n  \"preferences\": {\n    \"generateIllustrations\": false,\n    \"language\": \"en\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/stories/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "stories", "create"]
+            },
+            "description": "Create a new story using text prompt"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('storyId', response.data.storyId);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Story with Drawing",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"storyTypeId\": \"friendship_mountain_robots_2_2\",\n  \"drawingImageBase64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==\",\n  \"characterNames\": [\"Robo\", \"Beep\"],\n  \"isShared\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/stories/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "stories", "create"]
+            },
+            "description": "Create a story from a drawing"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Story Management",
+      "item": [
+        {
+          "name": "Get Story by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/stories/{{storyId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "stories", "{{storyId}}"]
+            },
+            "description": "Get a specific story by ID"
+          }
+        },
+        {
+          "name": "Get Story Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/stories/{{storyId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "stories", "{{storyId}}", "status"]
+            },
+            "description": "Get story generation status and progress"
+          }
+        },
+        {
+          "name": "Toggle Story Share",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isShared\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/stories/{{storyId}}/share",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "stories", "{{storyId}}", "share"]
+            },
+            "description": "Toggle story sharing status"
+          }
+        },
+        {
+          "name": "Continue Story",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"additionalPrompt\": \"The explorer meets a friendly talking rabbit\",\n  \"newCharacters\": [\"Bunny Friend\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/stories/{{storyId}}/continue",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "stories", "{{storyId}}", "continue"]
+            },
+            "description": "Continue an existing completed story"
+          }
+        },
+        {
+          "name": "Delete Story",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/stories/{{storyId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "stories", "{{storyId}}"]
+            },
+            "description": "Delete a story and its associated media"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Example Workflows",
+      "item": [
+        {
+          "name": "Complete Story Creation Flow",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"storyTypeId\": \"friendship_mountain_robots_2_2\",\n  \"userPrompt\": \"Two friendly robots become best friends and help each other\",\n  \"characterNames\": [\"Robo\", \"Beep\"],\n  \"isShared\": false,\n  \"preferences\": {\n    \"generateIllustrations\": false,\n    \"language\": \"en\",\n    \"narrationSpeed\": 1.0\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/stories/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "stories", "create"]
+            },
+            "description": "Example of complete story creation with all options"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,393 @@
+{
+  "info": {
+    "name": "PictoTale Users API",
+    "description": "User management endpoints for PictoTale - Profile, progress, and admin features",
+    "version": "1.0.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3001",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOiJ6Y0NaTGlZOWQzWjdRSGRuZW9sOVJtZTZJalMyIiwiZW1haWwiOiJtdW5kdXV1c0BnbWFpbC5jb20iLCJyb2xlIjoidXNlciIsInNlc3Npb25JZCI6Inh6R0tZVEp6dXB3QXVnbGl4VkRhY0NTdlIxd3pGTjJLIiwiaWF0IjoxNzU0MDgzNjY2LCJleHAiOjE3NTQ2ODg0NjZ9.UEKyG5lBfWy6a6cruNJFfj4wv79tC8c-DdC-qhmQJyM",
+      "type": "string"
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Profile Management",
+      "item": [
+        {
+          "name": "Get User Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/user/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "profile"]
+            },
+            "description": "Get current user's complete profile"
+          }
+        },
+        {
+          "name": "Update User Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"displayName\": \"Creative Explorer Sam\",\n  \"profile\": {\n    \"childName\": \"Sam the Explorer\",\n    \"age\": 9,\n    \"preferredLanguage\": \"en\",\n    \"isChildAccount\": true\n  },\n  \"preferences\": {\n    \"narrationSpeed\": 1.5,\n    \"maxStoryLength\": 300\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/user/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "profile"]
+            },
+            "description": "Update user profile information"
+          }
+        },
+        {
+          "name": "Upload Avatar",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "avatar",
+                  "type": "file",
+                  "src": "/path/to/avatar.jpg"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/user/profile/avatar",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "profile", "avatar"]
+            },
+            "description": "Upload user avatar image"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dashboard & Progress",
+      "item": [
+        {
+          "name": "Get User Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/user/dashboard",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "dashboard"]
+            },
+            "description": "Get user dashboard with progress, recent stories, and achievements"
+          }
+        },
+        {
+          "name": "Update User Progress",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"totalStoriesCreated\": 8,\n  \"totalStoriesCompleted\": 6,\n  \"totalDrawingsMade\": 12,\n  \"totalListeningTime\": 180,\n  \"streakDays\": 10,\n  \"experiencePoints\": 500,\n  \"achievements\": [\"master_storyteller\"],\n  \"badges\": [\"creative_genius\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/user/progress",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "progress"]
+            },
+            "description": "Update user progress and achievements"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Story Collections",
+      "item": [
+        {
+          "name": "Add Story to Saved",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"storyId\": \"vEW1ncPdal84eoWetqYg\",\n  \"action\": \"add\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/user/stories/saved",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "stories", "saved"]
+            },
+            "description": "Add story to saved collection"
+          }
+        },
+        {
+          "name": "Remove Story from Saved",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"storyId\": \"vEW1ncPdal84eoWetqYg\",\n  \"action\": \"remove\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/user/stories/saved",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "stories", "saved"]
+            },
+            "description": "Remove story from saved collection"
+          }
+        },
+        {
+          "name": "Add Story to Favorites",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"storyId\": \"SLREH6spJFfuJ4xGpMGg\",\n  \"action\": \"add\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/user/stories/favorites",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "stories", "favorites"]
+            },
+            "description": "Add story to favorites collection"
+          }
+        },
+        {
+          "name": "Remove Story from Favorites",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"storyId\": \"SLREH6spJFfuJ4xGpMGg\",\n  \"action\": \"remove\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/user/stories/favorites",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "stories", "favorites"]
+            },
+            "description": "Remove story from favorites collection"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Parental Controls",
+      "item": [
+        {
+          "name": "Update Parental Controls",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"parentalPin\": \"1234\",\n  \"requiresPinForSettings\": true,\n  \"requiresPinForPurchases\": true,\n  \"maxDailyUsageMinutes\": 120,\n  \"allowedGenres\": [\"adventure\", \"friendship\"],\n  \"blockedWords\": [\"scary\", \"monster\"],\n  \"shareProgressWithParent\": true,\n  \"allowSocialFeatures\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/user/parental-controls",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "parental-controls"]
+            },
+            "description": "Update parental controls (requires parent/admin role)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin Management",
+      "item": [
+        {
+          "name": "Get All Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/user/all?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "all"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Get all users with filtering (admin/moderator only)"
+          }
+        },
+        {
+          "name": "Get Specific User",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/user/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "{{userId}}"]
+            },
+            "description": "Get specific user details (admin/moderator only)"
+          }
+        },
+        {
+          "name": "Update User Role",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"moderator\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/user/{{userId}}/role",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "{{userId}}", "role"]
+            },
+            "description": "Update user role (admin only)"
+          }
+        },
+        {
+          "name": "Delete User Account",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/user/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "user", "{{userId}}"]
+            },
+            "description": "Soft delete user account (admin only)"
+          }
+        }
+      ]
+    }
+  ]
+}
