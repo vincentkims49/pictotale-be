@@ -563,13 +563,29 @@ exports.disable2FA = asyncHandler(async (req, res, next) => {
 exports.refreshToken = asyncHandler(async (req, res, next) => {
   const { refreshToken } = req.body;
 
-  if (!refreshToken) throw new AppError('Refresh token is required', 400);
+  if (!refreshToken) {
+    throw new AppError('Refresh token is required', 400);
+  }
 
   try {
-    const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
+    // Use JWT utility for better error handling
+    const JWTUtils = require('../utils/jwtUtils');
+    const decoded = JWTUtils.validateToken(refreshToken, process.env.JWT_SECRET);
 
+    // Verify session exists and matches
     if (!req.session.user || req.session.user.uid !== decoded.uid) {
-      throw new AppError('Session expired', 401);
+      throw new AppError('Session expired or invalid. Please login again.', 401);
+    }
+
+    // Verify user still exists in Firebase
+    const userRecord = await getAuth().getUser(decoded.uid);
+    if (!userRecord) {
+      throw new AppError('User account no longer exists', 401);
+    }
+
+    // Check if user is disabled
+    if (userRecord.disabled) {
+      throw new AppError('User account has been disabled', 403);
     }
 
     const newToken = jwt.sign(

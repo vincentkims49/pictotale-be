@@ -2,6 +2,7 @@ const { getAuth } = require('../config/firebase');
 const jwt = require('jsonwebtoken');
 const { AppError } = require('../utils/AppError');
 const { asyncHandler } = require('../utils/asyncHandler');
+const JWTUtils = require('../utils/jwtUtils');
 
 const protect = asyncHandler(async (req, res, next) => {
   let token;
@@ -11,13 +12,11 @@ const protect = asyncHandler(async (req, res, next) => {
   console.log('Session ID:', req.sessionID);
   console.log('Existing Session:', req.session.user || 'None');
   
-  // 1. Check for token in both header and cookies
-  if (req.headers.authorization?.startsWith('Bearer')) {
-    token = req.headers.authorization.split(' ')[1];
-    console.log('JWT found in Authorization header');
-  } else if (req.cookies?.token) {
-    token = req.cookies.token;
-    console.log('JWT found in cookie');
+  // 1. Extract token using utility function
+  token = JWTUtils.extractToken(req);
+  if (token) {
+    console.log('JWT found, format valid:', JWTUtils.isValidTokenFormat(token));
+    console.log('JWT expired:', JWTUtils.isTokenExpired(token));
   }
 
   // 2. Session-based authentication (primary)
@@ -40,7 +39,8 @@ const protect = asyncHandler(async (req, res, next) => {
   else if (token) {
     console.log('\n[JWT Auth Flow]');
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      // Use JWT utility for validation with comprehensive error handling
+      const decoded = JWTUtils.validateToken(token, process.env.JWT_SECRET);
       console.log('JWT decoded:', {
         uid: decoded.uid,
         email: decoded.email,
@@ -83,10 +83,27 @@ const protect = asyncHandler(async (req, res, next) => {
 
     } catch (error) {
       console.error('JWT validation failed:', error.message);
+
+      // Handle specific JWT errors
       if (error.name === 'TokenExpiredError') {
-        throw new AppError('Your session has expired', 401);
+        console.warn('Token expired at:', error.expiredAt);
+        throw new AppError('Your session has expired. Please login again.', 401);
+      } else if (error.name === 'JsonWebTokenError') {
+        console.warn('Invalid JWT format or signature');
+        throw new AppError('Invalid authentication token. Please login again.', 401);
+      } else if (error.name === 'NotBeforeError') {
+        console.warn('Token not active yet:', error.date);
+        throw new AppError('Authentication token not yet valid.', 401);
+      } else if (error.code === 'auth/user-not-found') {
+        console.warn('User not found in Firebase:', error.message);
+        throw new AppError('User account no longer exists. Please register again.', 401);
+      } else if (error.code === 'auth/user-disabled') {
+        console.warn('User account disabled:', error.message);
+        throw new AppError('Your account has been disabled. Please contact support.', 403);
+      } else {
+        console.error('Unexpected JWT error:', error);
+        throw new AppError('Authentication failed. Please login again.', 401);
       }
-      throw new AppError('Invalid authentication token', 401);
     }
   }
 

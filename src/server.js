@@ -12,7 +12,8 @@ const { errorHandler } = require('./middleware/errorHandler');
 const { requestLogger } = require('./middleware/requestLogger');
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/user');
-const storyRoutes = require('./routes/story'); // ← Add this line
+const storyRoutes = require('./routes/story');
+const debugRoutes = require('./routes/debug');
 const logger = require('./utils/logger');
 const swaggerUi = require('swagger-ui-express');
 const swaggerDocument = require('../docs/swagger.json');
@@ -110,6 +111,13 @@ console.log('Setting up routes...');
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/v1/stories', storyRoutes);
+
+// Debug routes (only in development)
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/api/debug', debugRoutes);
+  console.log('Debug routes enabled (development mode)');
+}
+
 console.log('Routes configured');
 
 // 404 handler
